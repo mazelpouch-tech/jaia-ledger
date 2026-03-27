@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { formatMAD, formatDateShort, getTodayISO } from "@/lib/format";
+import { useToast } from "@/components/Toast";
+import { generateBDCPdf } from "@/lib/pdf";
 
 interface Article {
   description: string;
@@ -55,11 +57,13 @@ function StatusBadge({ statut }: { statut: string }) {
 }
 
 export default function BDCRecettes() {
+  const { toast } = useToast();
   const [bdcs, setBdcs] = useState<BDC[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<ViewMode>("list");
   const [selectedBDC, setSelectedBDC] = useState<BDC | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Form state
   const [formDate, setFormDate] = useState(getTodayISO());
@@ -126,28 +130,91 @@ export default function BDCRecettes() {
         }),
       });
       if (res.ok) {
+        toast("BDC créé avec succès");
         await fetchBDCs();
         setView("list");
+      } else {
+        toast("Erreur lors de la création", "error");
       }
     } catch {
-      // silent
+      toast("Erreur lors de la création", "error");
     } finally {
       setSaving(false);
     }
   };
 
+  const handleStatusChange = async (id: string, status: string) => {
+    try {
+      const res = await fetch(`/api/bdc-recettes/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (res.ok) {
+        toast(`Statut mis à jour : ${status}`);
+        await fetchBDCs();
+        if (selectedBDC && selectedBDC.id === id) {
+          setSelectedBDC({ ...selectedBDC, statut: status as BDC["statut"] });
+        }
+      } else {
+        toast("Erreur lors de la mise à jour", "error");
+      }
+    } catch {
+      toast("Erreur lors de la mise à jour", "error");
+    }
+  };
+
+  const handleDeleteBDC = async (id: string) => {
+    try {
+      const res = await fetch(`/api/bdc-recettes/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        toast("BDC supprimé");
+        setDeletingId(null);
+        setView("list");
+        await fetchBDCs();
+      } else {
+        toast("Erreur lors de la suppression", "error");
+      }
+    } catch {
+      toast("Erreur lors de la suppression", "error");
+    }
+  };
+
   const totals = computeTotals(formArticles);
+
+  const handleExportPdf = (bdc: BDC) => {
+    generateBDCPdf({
+      numero: bdc.numero,
+      date: formatDateShort(bdc.date),
+      clientOrSupplier: bdc.client,
+      clientLabel: "Client",
+      articles: bdc.articles,
+      totalHT: bdc.totalHT,
+      totalTVA: bdc.totalTVA,
+      totalTTC: bdc.totalTTC,
+      type: "recette",
+    });
+    toast("PDF généré");
+  };
 
   // Detail view
   if (view === "detail" && selectedBDC) {
     return (
       <div className="mx-auto max-w-2xl space-y-6">
-        <button
-          onClick={() => setView("list")}
-          className="text-sm font-medium text-gold hover:underline"
-        >
-          &larr; Retour
-        </button>
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setView("list")}
+            className="text-sm font-medium text-gold hover:underline"
+          >
+            &larr; Retour
+          </button>
+          <button
+            onClick={() => handleExportPdf(selectedBDC)}
+            className="flex items-center gap-2 rounded-lg border border-cream-dark bg-white px-4 py-2 text-sm font-medium text-brown-dark transition-colors hover:bg-cream-dark"
+          >
+            <span>&#128196;</span> Exporter PDF
+          </button>
+        </div>
         <div className="rounded-xl border border-cream-dark bg-white p-5">
           <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="font-[family-name:var(--font-heading)] text-2xl font-bold text-brown-dark">
@@ -209,7 +276,66 @@ export default function BDCRecettes() {
               <span className="font-bold text-green">{formatMAD(selectedBDC.totalTTC)}</span>
             </div>
           </div>
+
+          {/* Actions */}
+          <div className="mt-4 flex flex-col gap-2 border-t border-cream-dark pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex gap-2">
+              <span className="text-xs font-medium text-brown">Changer le statut :</span>
+              {(["brouillon", "envoyé", "payé"] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => handleStatusChange(selectedBDC.id, s)}
+                  disabled={selectedBDC.statut === s}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    selectedBDC.statut === s
+                      ? "cursor-default opacity-50"
+                      : "hover:opacity-80"
+                  } ${
+                    s === "payé"
+                      ? "bg-green-light text-green"
+                      : s === "envoyé"
+                        ? "bg-amber-light text-gold"
+                        : "bg-cream-dark text-brown"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setDeletingId(selectedBDC.id)}
+              className="rounded-lg border border-red/30 px-3 py-1.5 text-xs font-medium text-red transition-colors hover:bg-red-light"
+            >
+              Supprimer ce BDC
+            </button>
+          </div>
         </div>
+
+        {/* Delete Confirmation */}
+        {deletingId !== null && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="mx-4 w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
+              <h3 className="text-lg font-semibold text-brown-dark">Confirmer la suppression</h3>
+              <p className="mt-2 text-sm text-brown">
+                Supprimer ce bon de commande et tous ses articles ? Cette action est irr&eacute;versible.
+              </p>
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  onClick={() => setDeletingId(null)}
+                  className="rounded-lg border border-cream-dark px-4 py-2 text-sm font-medium text-brown hover:bg-cream-dark"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={() => handleDeleteBDC(deletingId)}
+                  className="rounded-lg bg-red px-4 py-2 text-sm font-medium text-white hover:bg-red/90"
+                >
+                  Supprimer
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Cormorant_Garamond, DM_Sans } from "next/font/google";
 import "./globals.css";
 import AppShell from "@/components/AppShell";
+import { ToastProvider } from "@/components/Toast";
 
 const cormorantGaramond = Cormorant_Garamond({
   subsets: ["latin"],
@@ -30,7 +31,9 @@ export default function RootLayout({
   return (
     <html lang="fr" className={`${cormorantGaramond.variable} ${dmSans.variable}`}>
       <body>
-        <AppShell>{children}</AppShell>
+        <ToastProvider>
+          <AppShell>{children}</AppShell>
+        </ToastProvider>
       </body>
     </html>
   );
