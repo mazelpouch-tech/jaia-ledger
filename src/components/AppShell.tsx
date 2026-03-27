@@ -10,9 +10,11 @@ import RapportDecaissement from "@/components/RapportDecaissement";
 import Balance from "@/components/Balance";
 import RecapMensuel from "@/components/RecapMensuel";
 import Statistique from "@/components/Statistique";
+import Calendrier from "@/components/Calendrier";
 import BDCRecettes from "@/components/BDCRecettes";
 import BDCDepenses from "@/components/BDCDepenses";
 import Parametres from "@/components/Parametres";
+import PinLock from "@/components/PinLock";
 
 type PageKey =
   | "dashboard"
@@ -23,6 +25,7 @@ type PageKey =
   | "balance"
   | "recap-mensuel"
   | "statistique"
+  | "calendrier"
   | "bdc-recettes"
   | "bdc-depenses"
   | "parametres";
@@ -42,6 +45,7 @@ const navItems: NavItem[] = [
   { key: "balance", label: "Balance", icon: "⚖️" },
   { key: "recap-mensuel", label: "Récap Mensuel", icon: "📅" },
   { key: "statistique", label: "Statistique", icon: "📈" },
+  { key: "calendrier", label: "Calendrier", icon: "📆" },
   { key: "bdc-recettes", label: "BDC Recettes", icon: "📋" },
   { key: "bdc-depenses", label: "BDC Dépenses", icon: "📋" },
   { key: "parametres", label: "Paramètre", icon: "⚙️" },
@@ -63,6 +67,7 @@ const pageComponents: Record<PageKey, React.ComponentType<any>> = {
   balance: Balance,
   "recap-mensuel": RecapMensuel,
   statistique: Statistique,
+  calendrier: Calendrier,
   "bdc-recettes": BDCRecettes,
   "bdc-depenses": BDCDepenses,
   parametres: Parametres,
@@ -78,10 +83,16 @@ function formatFrenchDate(date: Date): string {
 }
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
+  const [locked, setLocked] = useState(true);
   const [activePage, setActivePage] = useState<PageKey>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [todayStr, setTodayStr] = useState("");
   const [darkMode, setDarkMode] = useState(false);
+
+  useEffect(() => {
+    const hasPin = localStorage.getItem("jaia-pin-hash");
+    if (!hasPin) setLocked(false);
+  }, []);
 
   useEffect(() => {
     setTodayStr(formatFrenchDate(new Date()));
@@ -133,6 +144,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     onToggleSidebar: toggleSidebar,
     onToggleDarkMode: toggleDarkMode,
   });
+
+  if (locked) {
+    return <PinLock onUnlock={() => setLocked(false)} />;
+  }
 
   return (
     <div className="min-h-screen bg-cream font-[family-name:var(--font-body)]">

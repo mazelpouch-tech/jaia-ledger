@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { decaissements, categories } from "@/db/schema";
 import { eq, and, or, ilike, sql, desc } from "drizzle-orm";
+import { logAudit } from "@/lib/audit";
 
 export async function GET(request: NextRequest) {
   try {
@@ -157,6 +158,8 @@ export async function POST(request: NextRequest) {
       paymentMethod,
       notes: body.notes,
     }).returning();
+
+    await logAudit("create", "decaissements", created.id);
 
     return NextResponse.json(created, { status: 201 });
   } catch (error) {

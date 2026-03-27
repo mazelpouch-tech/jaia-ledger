@@ -97,3 +97,12 @@ export const bdcDepenseItems = pgTable("bdc_depense_items", {
   unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
   tvaRate: numeric("tva_rate", { precision: 5, scale: 2 }).default("10"),
 });
+
+export const auditLog = pgTable("audit_log", {
+  id: serial("id").primaryKey(),
+  action: text("action").notNull(),
+  tableName: text("table_name").notNull(),
+  recordId: integer("record_id"),
+  details: text("details"),
+  createdAt: timestamp("created_at").defaultNow(),
+});

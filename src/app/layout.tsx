@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Cormorant_Garamond, DM_Sans } from "next/font/google";
 import "./globals.css";
 import AppShell from "@/components/AppShell";
@@ -21,6 +21,16 @@ const dmSans = DM_Sans({
 export const metadata: Metadata = {
   title: "JAÏA Ledger",
   description: "Gestion financière du Riad",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "JAÏA Ledger",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#c4973b",
 };
 
 export default function RootLayout({

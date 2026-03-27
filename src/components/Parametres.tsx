@@ -56,6 +56,18 @@ export default function Parametres() {
   const [newDeviseCode, setNewDeviseCode] = useState("");
   const [newDeviseNom, setNewDeviseNom] = useState("");
   const [newDeviseTaux, setNewDeviseTaux] = useState("");
+  const [hasPin, setHasPin] = useState(false);
+
+  useEffect(() => {
+    setHasPin(!!localStorage.getItem("jaia-pin-hash"));
+  }, []);
+
+  const removePin = () => {
+    if (window.confirm("Supprimer le code PIN ? L\u2019application ne sera plus prot\u00e9g\u00e9e.")) {
+      localStorage.removeItem("jaia-pin-hash");
+      setHasPin(false);
+    }
+  };
 
   useEffect(() => {
     fetch("/api/settings")
@@ -510,6 +522,65 @@ export default function Parametres() {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* S\u00e9curit\u00e9 */}
+      <div className="rounded-xl border border-cream-dark bg-white p-5">
+        <h2 className="mb-4 font-[family-name:var(--font-heading)] text-xl font-semibold text-brown-dark">
+          S&eacute;curit&eacute;
+        </h2>
+        {hasPin ? (
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-green">Code PIN actif</p>
+              <p className="text-xs text-brown">L&apos;application est prot&eacute;g&eacute;e par un code PIN</p>
+            </div>
+            <button onClick={removePin} className="rounded-lg border border-red/30 px-3 py-1.5 text-sm text-red transition-colors hover:bg-red-light">
+              Supprimer
+            </button>
+          </div>
+        ) : (
+          <p className="text-sm text-brown">Aucun code PIN configur&eacute;. Rechargez l&apos;application pour en cr&eacute;er un.</p>
+        )}
+      </div>
+
+      {/* Sauvegarde & Restauration */}
+      <div className="rounded-xl border border-cream-dark bg-white p-5">
+        <h2 className="mb-4 font-[family-name:var(--font-heading)] text-xl font-semibold text-brown-dark">
+          Sauvegarde &amp; Restauration
+        </h2>
+        <p className="mb-4 text-sm text-brown">
+          Exportez vos donn&eacute;es pour les sauvegarder ou les transf&eacute;rer.
+        </p>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <button
+            onClick={async () => {
+              try {
+                const res = await fetch("/api/backup");
+                if (!res.ok) throw new Error("Export failed");
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `jaia-ledger-backup-${new Date().toISOString().split("T")[0]}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              } catch {
+                alert("Erreur lors de l'export");
+              }
+            }}
+            className="rounded-lg border border-gold bg-amber-light px-4 py-2.5 text-sm font-semibold text-gold transition-colors hover:bg-gold hover:text-white"
+          >
+            Exporter les donn&eacute;es
+          </button>
+          <button
+            disabled
+            className="rounded-lg border border-cream-dark px-4 py-2.5 text-sm font-semibold text-brown/50 opacity-60 cursor-not-allowed"
+            title="Bient&ocirc;t disponible"
+          >
+            Restaurer (Bient&ocirc;t disponible)
+          </button>
         </div>
       </div>
 

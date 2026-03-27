@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { encaissements } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { logAudit } from "@/lib/audit";
 
 export async function PUT(
   request: NextRequest,
@@ -37,6 +38,8 @@ export async function PUT(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
+    await logAudit("update", "encaissements", updated.id, body);
+
     return NextResponse.json(updated);
   } catch (error) {
     console.error("PUT /api/encaissements/[id] error:", error);
@@ -63,6 +66,8 @@ export async function DELETE(
     if (!deleted) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
+
+    await logAudit("delete", "encaissements", deleted.id);
 
     return NextResponse.json({ success: true });
   } catch (error) {
