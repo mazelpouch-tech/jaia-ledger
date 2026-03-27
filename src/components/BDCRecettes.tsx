@@ -1,0 +1,453 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { formatMAD, formatDateShort, getTodayISO } from "@/lib/format";
+
+interface Article {
+  description: string;
+  quantite: number;
+  prixUnitaireHT: number;
+  tauxTVA: number;
+}
+
+interface BDC {
+  id: string;
+  numero: string;
+  date: string;
+  client: string;
+  articles: Article[];
+  totalHT: number;
+  totalTVA: number;
+  totalTTC: number;
+  statut: "payé" | "brouillon" | "envoyé";
+}
+
+type ViewMode = "list" | "create" | "detail";
+
+const emptyArticle = (): Article => ({
+  description: "",
+  quantite: 1,
+  prixUnitaireHT: 0,
+  tauxTVA: 20,
+});
+
+function computeTotals(articles: Article[]) {
+  const totalHT = articles.reduce((s, a) => s + a.quantite * a.prixUnitaireHT, 0);
+  const totalTVA = articles.reduce(
+    (s, a) => s + a.quantite * a.prixUnitaireHT * (a.tauxTVA / 100),
+    0
+  );
+  return { totalHT, totalTVA, totalTTC: totalHT + totalTVA };
+}
+
+function StatusBadge({ statut }: { statut: string }) {
+  const cls =
+    statut === "payé"
+      ? "bg-green-light text-green"
+      : statut === "envoyé"
+        ? "bg-amber-light text-gold"
+        : "bg-cream-dark text-brown";
+  return (
+    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${cls}`}>
+      {statut}
+    </span>
+  );
+}
+
+export default function BDCRecettes() {
+  const [bdcs, setBdcs] = useState<BDC[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState<ViewMode>("list");
+  const [selectedBDC, setSelectedBDC] = useState<BDC | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Form state
+  const [formDate, setFormDate] = useState(getTodayISO());
+  const [formClient, setFormClient] = useState("");
+  const [formArticles, setFormArticles] = useState<Article[]>([emptyArticle()]);
+
+  const fetchBDCs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/bdc-recettes");
+      if (res.ok) {
+        const d = await res.json();
+        setBdcs(Array.isArray(d) ? d : d.data ?? []);
+      }
+    } catch {
+      // silent
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchBDCs();
+  }, [fetchBDCs]);
+
+  const openCreate = () => {
+    setFormDate(getTodayISO());
+    setFormClient("");
+    setFormArticles([emptyArticle()]);
+    setView("create");
+  };
+
+  const openDetail = (bdc: BDC) => {
+    setSelectedBDC(bdc);
+    setView("detail");
+  };
+
+  const updateArticle = (index: number, field: keyof Article, value: string | number) => {
+    setFormArticles((prev) =>
+      prev.map((a, i) => (i === index ? { ...a, [field]: value } : a))
+    );
+  };
+
+  const removeArticle = (index: number) => {
+    setFormArticles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSave = async () => {
+    if (!formClient.trim()) return;
+    const validArticles = formArticles.filter((a) => a.description.trim());
+    if (validArticles.length === 0) return;
+
+    const totals = computeTotals(validArticles);
+    setSaving(true);
+    try {
+      const res = await fetch("/api/bdc-recettes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: formDate,
+          client: formClient,
+          articles: validArticles,
+          ...totals,
+        }),
+      });
+      if (res.ok) {
+        await fetchBDCs();
+        setView("list");
+      }
+    } catch {
+      // silent
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const totals = computeTotals(formArticles);
+
+  // Detail view
+  if (view === "detail" && selectedBDC) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-6">
+        <button
+          onClick={() => setView("list")}
+          className="text-sm font-medium text-gold hover:underline"
+        >
+          &larr; Retour
+        </button>
+        <div className="rounded-xl border border-cream-dark bg-white p-5">
+          <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="font-[family-name:var(--font-heading)] text-2xl font-bold text-brown-dark">
+              BDC {selectedBDC.numero}
+            </h2>
+            <StatusBadge statut={selectedBDC.statut} />
+          </div>
+          <div className="mb-4 grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="text-brown">Date :</span>{" "}
+              <span className="font-medium text-brown-dark">{formatDateShort(selectedBDC.date)}</span>
+            </div>
+            <div>
+              <span className="text-brown">Client :</span>{" "}
+              <span className="font-medium text-brown-dark">{selectedBDC.client}</span>
+            </div>
+          </div>
+
+          {/* Articles */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-cream-dark text-xs font-semibold uppercase tracking-wide text-brown">
+                  <th className="pb-2 pr-3">Description</th>
+                  <th className="pb-2 pr-3 text-right">Qt&eacute;</th>
+                  <th className="pb-2 pr-3 text-right">P.U. HT</th>
+                  <th className="pb-2 pr-3 text-right">TVA</th>
+                  <th className="pb-2 text-right">Total HT</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedBDC.articles.map((a, i) => (
+                  <tr key={i} className="border-b border-cream-dark/50">
+                    <td className="py-2 pr-3 text-brown-dark">{a.description}</td>
+                    <td className="py-2 pr-3 text-right text-brown-dark">{a.quantite}</td>
+                    <td className="py-2 pr-3 text-right text-brown-dark">{formatMAD(a.prixUnitaireHT)}</td>
+                    <td className="py-2 pr-3 text-right text-brown-dark">{a.tauxTVA}%</td>
+                    <td className="py-2 text-right font-medium text-brown-dark">
+                      {formatMAD(a.quantite * a.prixUnitaireHT)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Totals */}
+          <div className="mt-4 space-y-1 border-t border-cream-dark pt-4 text-sm">
+            <div className="flex justify-between">
+              <span className="text-brown">Total HT</span>
+              <span className="font-medium text-brown-dark">{formatMAD(selectedBDC.totalHT)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-brown">Total TVA</span>
+              <span className="font-medium text-brown-dark">{formatMAD(selectedBDC.totalTVA)}</span>
+            </div>
+            <div className="flex justify-between text-base">
+              <span className="font-semibold text-brown-dark">Total TTC</span>
+              <span className="font-bold text-green">{formatMAD(selectedBDC.totalTTC)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Create form
+  if (view === "create") {
+    return (
+      <div className="mx-auto max-w-2xl space-y-6">
+        <button
+          onClick={() => setView("list")}
+          className="text-sm font-medium text-gold hover:underline"
+        >
+          &larr; Retour
+        </button>
+        <h2 className="font-[family-name:var(--font-heading)] text-2xl font-bold text-brown-dark">
+          Nouveau BDC Recette
+        </h2>
+        <div className="rounded-xl border border-cream-dark bg-white p-5 space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brown">
+                Date
+              </label>
+              <input
+                type="date"
+                value={formDate}
+                onChange={(e) => setFormDate(e.target.value)}
+                className="w-full rounded-lg border border-cream-dark bg-cream px-3 py-2 text-sm text-brown-dark focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brown">
+                Client
+              </label>
+              <input
+                type="text"
+                value={formClient}
+                onChange={(e) => setFormClient(e.target.value)}
+                placeholder="Nom du client"
+                className="w-full rounded-lg border border-cream-dark bg-cream px-3 py-2 text-sm text-brown-dark placeholder:text-brown/50 focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold"
+              />
+            </div>
+          </div>
+
+          {/* Articles */}
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-brown">
+              Articles
+            </h3>
+            <div className="space-y-3">
+              {formArticles.map((a, i) => (
+                <div key={i} className="rounded-lg border border-cream-dark bg-cream p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-brown">Article {i + 1}</span>
+                    {formArticles.length > 1 && (
+                      <button
+                        onClick={() => removeArticle(i)}
+                        className="text-xs text-red hover:underline"
+                      >
+                        Supprimer
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
+                    <div className="sm:col-span-2">
+                      <input
+                        type="text"
+                        value={a.description}
+                        onChange={(e) => updateArticle(i, "description", e.target.value)}
+                        placeholder="Description"
+                        className="w-full rounded-md border border-cream-dark bg-white px-2 py-1.5 text-sm text-brown-dark placeholder:text-brown/50 focus:border-gold focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <input
+                        type="number"
+                        min={1}
+                        value={a.quantite}
+                        onChange={(e) => updateArticle(i, "quantite", Number(e.target.value))}
+                        placeholder="Qt\u00e9"
+                        className="w-full rounded-md border border-cream-dark bg-white px-2 py-1.5 text-sm text-brown-dark focus:border-gold focus:outline-none"
+                      />
+                      <span className="mt-0.5 block text-[10px] text-brown">Quantit&eacute;</span>
+                    </div>
+                    <div>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={a.prixUnitaireHT}
+                        onChange={(e) => updateArticle(i, "prixUnitaireHT", Number(e.target.value))}
+                        placeholder="P.U. HT"
+                        className="w-full rounded-md border border-cream-dark bg-white px-2 py-1.5 text-sm text-brown-dark focus:border-gold focus:outline-none"
+                      />
+                      <span className="mt-0.5 block text-[10px] text-brown">Prix HT</span>
+                    </div>
+                  </div>
+                  <div className="mt-2 w-24">
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={a.tauxTVA}
+                      onChange={(e) => updateArticle(i, "tauxTVA", Number(e.target.value))}
+                      className="w-full rounded-md border border-cream-dark bg-white px-2 py-1.5 text-sm text-brown-dark focus:border-gold focus:outline-none"
+                    />
+                    <span className="mt-0.5 block text-[10px] text-brown">TVA %</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => setFormArticles((prev) => [...prev, emptyArticle()])}
+              className="mt-3 rounded-lg border border-dashed border-gold/50 px-4 py-2 text-sm font-medium text-gold transition-colors hover:bg-amber-light"
+            >
+              + Ajouter un article
+            </button>
+          </div>
+
+          {/* Totals */}
+          <div className="space-y-1 border-t border-cream-dark pt-4 text-sm">
+            <div className="flex justify-between">
+              <span className="text-brown">Total HT</span>
+              <span className="font-medium text-brown-dark">{formatMAD(totals.totalHT)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-brown">Total TVA</span>
+              <span className="font-medium text-brown-dark">{formatMAD(totals.totalTVA)}</span>
+            </div>
+            <div className="flex justify-between text-base">
+              <span className="font-semibold text-brown-dark">Total TTC</span>
+              <span className="font-bold text-green">{formatMAD(totals.totalTTC)}</span>
+            </div>
+          </div>
+
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full rounded-lg bg-green px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-green/90 disabled:opacity-50"
+          >
+            {saving ? "Enregistrement..." : "Enregistrer le BDC"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // List view
+  return (
+    <div className="mx-auto max-w-2xl space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="font-[family-name:var(--font-heading)] text-3xl font-bold text-brown-dark">
+            BDC Recettes
+          </h1>
+          <p className="mt-1 text-sm text-brown">
+            Bons de commande &mdash; Recettes
+          </p>
+        </div>
+        <button
+          onClick={openCreate}
+          className="rounded-lg bg-green px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-green/90"
+        >
+          Nouveau BDC
+        </button>
+      </div>
+
+      {loading ? (
+        <p className="py-12 text-center text-sm text-brown">Chargement...</p>
+      ) : bdcs.length === 0 ? (
+        <p className="rounded-xl border border-cream-dark bg-white py-12 text-center text-sm text-brown">
+          Aucun bon de commande
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-cream-dark bg-white">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-cream-dark text-xs font-semibold uppercase tracking-wide text-brown">
+                <th className="px-4 py-3">N&deg;</th>
+                <th className="px-4 py-3">Date</th>
+                <th className="hidden px-4 py-3 sm:table-cell">Client</th>
+                <th className="hidden px-4 py-3 text-right sm:table-cell">Articles</th>
+                <th className="hidden px-4 py-3 text-right md:table-cell">HT</th>
+                <th className="hidden px-4 py-3 text-right md:table-cell">TVA</th>
+                <th className="px-4 py-3 text-right">TTC</th>
+                <th className="px-4 py-3 text-center">Statut</th>
+                <th className="px-4 py-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {bdcs.map((bdc) => (
+                <tr key={bdc.id} className="border-b border-cream-dark/50 last:border-0">
+                  <td className="px-4 py-3 font-medium text-brown-dark">{bdc.numero}</td>
+                  <td className="px-4 py-3 text-brown">{formatDateShort(bdc.date)}</td>
+                  <td className="hidden px-4 py-3 text-brown-dark sm:table-cell">{bdc.client}</td>
+                  <td className="hidden px-4 py-3 text-right text-brown sm:table-cell">
+                    {bdc.articles?.length ?? 0}
+                  </td>
+                  <td className="hidden px-4 py-3 text-right text-brown-dark md:table-cell">
+                    {formatMAD(bdc.totalHT)}
+                  </td>
+                  <td className="hidden px-4 py-3 text-right text-brown-dark md:table-cell">
+                    {formatMAD(bdc.totalTVA)}
+                  </td>
+                  <td className="px-4 py-3 text-right font-bold text-green">
+                    {formatMAD(bdc.totalTTC)}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <StatusBadge statut={bdc.statut} />
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      onClick={() => openDetail(bdc)}
+                      className="rounded-md p-1.5 text-brown transition-colors hover:bg-cream-dark hover:text-brown-dark"
+                      title="Voir le d\u00e9tail"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                        className="h-4 w-4"
+                      >
+                        <path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" />
+                        <path
+                          fillRule="evenodd"
+                          d="M.664 10.59a1.651 1.651 0 010-1.186A10.004 10.004 0 0110 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0110 17c-4.257 0-7.893-2.66-9.336-6.41zM14 10a4 4 0 11-8 0 4 4 0 018 0z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
