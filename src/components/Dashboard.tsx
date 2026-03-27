@@ -109,6 +109,65 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         </button>
       </div>
 
+      {/* Solde Card */}
+      {!loading && stats && (
+        <div className="rounded-xl border border-cream-dark bg-white p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-brown">
+                Solde du mois
+              </p>
+              <p
+                className={`mt-2 font-[family-name:var(--font-heading)] text-3xl font-bold ${
+                  (stats.totalEncaissements - stats.totalDecaissements) >= 0
+                    ? "text-green"
+                    : "text-red"
+                }`}
+              >
+                {(stats.totalEncaissements - stats.totalDecaissements) >= 0 ? "+" : ""}
+                {formatMAD(stats.totalEncaissements - stats.totalDecaissements)}
+              </p>
+            </div>
+            <div
+              className={`flex h-14 w-14 items-center justify-center rounded-full text-2xl ${
+                (stats.totalEncaissements - stats.totalDecaissements) >= 0
+                  ? "bg-green-light text-green"
+                  : "bg-red-light text-red"
+              }`}
+            >
+              {(stats.totalEncaissements - stats.totalDecaissements) >= 0 ? "↗" : "↘"}
+            </div>
+          </div>
+          {/* Proportional bar */}
+          {(stats.totalEncaissements > 0 || stats.totalDecaissements > 0) && (
+            <div className="mt-4">
+              <div className="flex h-3 overflow-hidden rounded-full">
+                <div
+                  className="bg-green transition-all duration-500"
+                  style={{
+                    width: `${(stats.totalEncaissements / (stats.totalEncaissements + stats.totalDecaissements)) * 100}%`,
+                  }}
+                />
+                <div
+                  className="bg-red transition-all duration-500"
+                  style={{
+                    width: `${(stats.totalDecaissements / (stats.totalEncaissements + stats.totalDecaissements)) * 100}%`,
+                  }}
+                />
+              </div>
+              <div className="mt-1.5 flex justify-between text-[10px] font-medium">
+                <span className="text-green">
+                  Recettes {((stats.totalEncaissements / (stats.totalEncaissements + stats.totalDecaissements)) * 100).toFixed(0)}%
+                </span>
+                <span className="text-red">
+                  Dépenses {((stats.totalDecaissements / (stats.totalEncaissements + stats.totalDecaissements)) * 100).toFixed(0)}%
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="rounded-xl border border-cream-dark bg-white p-5">
@@ -145,6 +204,34 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           )}
         </div>
       </div>
+
+      {/* Alerts */}
+      {!loading && stats && stats.totalEncaissements > 0 && (
+        <>
+          {stats.totalDecaissements > stats.totalEncaissements && (
+            <div className="flex items-center gap-3 rounded-xl border border-red/20 bg-red-light px-5 py-4">
+              <span className="text-2xl">&#9888;</span>
+              <div>
+                <p className="text-sm font-semibold text-red">Attention : d&eacute;penses sup&eacute;rieures aux recettes</p>
+                <p className="text-xs text-brown">
+                  D&eacute;ficit de {formatMAD(stats.totalDecaissements - stats.totalEncaissements)} ce mois
+                </p>
+              </div>
+            </div>
+          )}
+          {stats.totalDecaissements <= stats.totalEncaissements && stats.totalDecaissements > stats.totalEncaissements * 0.8 && (
+            <div className="flex items-center gap-3 rounded-xl border border-gold/20 bg-amber-light px-5 py-4">
+              <span className="text-2xl">&#9889;</span>
+              <div>
+                <p className="text-sm font-semibold text-gold">Vigilance : d&eacute;penses &eacute;lev&eacute;es</p>
+                <p className="text-xs text-brown">
+                  Les d&eacute;penses repr&eacute;sentent {((stats.totalDecaissements / stats.totalEncaissements) * 100).toFixed(0)}% des recettes
+                </p>
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {/* Recent Encaissements */}
       <div>

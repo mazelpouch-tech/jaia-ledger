@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { encaissements, decaissements, categories, rooms } from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, count } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
   try {
@@ -97,6 +97,13 @@ export async function GET(request: NextRequest) {
       .where(sql`to_char(${encaissements.date}, 'YYYY-MM') = ${month}`)
       .groupBy(rooms.name);
 
+    // Count active rooms dynamically
+    const [roomCount] = await db
+      .select({ count: count() })
+      .from(rooms)
+      .where(eq(rooms.active, true));
+    const numRooms = Number(roomCount.count) || 9; // fallback to 9
+
     const totalEnc = parseFloat(encTotal.total);
     const totalDec = parseFloat(decTotal.total);
 
@@ -112,7 +119,8 @@ export async function GET(request: NextRequest) {
       encByRoom: encByRoom.map((r) => ({ name: r.name, total: parseFloat(r.total) })),
       avgRevenuePerDay: Math.round((totalEnc / daysInMonth) * 100) / 100,
       avgExpensePerDay: Math.round((totalDec / daysInMonth) * 100) / 100,
-      revpar: Math.round((totalEnc / 9 / daysInMonth) * 100) / 100,
+      revpar: Math.round((totalEnc / numRooms / daysInMonth) * 100) / 100,
+      numRooms,
       margin: totalEnc > 0 ? Math.round(((totalEnc - totalDec) / totalEnc) * 10000) / 100 : 0,
     });
   } catch (error) {

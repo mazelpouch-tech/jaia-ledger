@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useKeyboardShortcuts } from "@/lib/useKeyboardShortcuts";
 import Dashboard from "@/components/Dashboard";
 import Encaissement from "@/components/Encaissement";
 import Decaissement from "@/components/Decaissement";
@@ -80,9 +81,29 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [activePage, setActivePage] = useState<PageKey>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [todayStr, setTodayStr] = useState("");
+  const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
     setTodayStr(formatFrenchDate(new Date()));
+
+    const saved = localStorage.getItem("darkMode");
+    if (saved !== null) {
+      const isDark = saved === "true";
+      setDarkMode(isDark);
+      document.documentElement.classList.toggle("dark", isDark);
+    } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      setDarkMode(true);
+      document.documentElement.classList.add("dark");
+    }
+  }, []);
+
+  const toggleDarkMode = useCallback(() => {
+    setDarkMode((prev) => {
+      const next = !prev;
+      localStorage.setItem("darkMode", String(next));
+      document.documentElement.classList.toggle("dark", next);
+      return next;
+    });
   }, []);
 
   const handleNavClick = useCallback((key: PageKey) => {
@@ -103,17 +124,36 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const toggleSidebar = useCallback(() => {
+    setSidebarOpen((prev) => !prev);
+  }, []);
+
+  useKeyboardShortcuts({
+    onNavigate: handleNavClick,
+    onToggleSidebar: toggleSidebar,
+    onToggleDarkMode: toggleDarkMode,
+  });
+
   return (
     <div className="min-h-screen bg-cream font-[family-name:var(--font-body)]">
       {/* Header */}
       <header className="sticky top-0 z-40 flex items-center justify-between border-b border-cream-dark bg-cream px-4 py-3">
-        <button
-          onClick={() => setSidebarOpen(true)}
-          className="flex h-10 w-10 items-center justify-center rounded-lg text-2xl text-brown-dark transition-colors hover:bg-cream-dark"
-          aria-label="Ouvrir le menu"
-        >
-          ☰
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-2xl text-brown-dark transition-colors hover:bg-cream-dark"
+            aria-label="Ouvrir le menu"
+          >
+            ☰
+          </button>
+          <button
+            onClick={toggleDarkMode}
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-xl text-brown-dark transition-colors hover:bg-cream-dark"
+            aria-label={darkMode ? "Passer en mode clair" : "Passer en mode sombre"}
+          >
+            {darkMode ? "\u2600" : "\u263E"}
+          </button>
+        </div>
 
         <h1 className="font-[family-name:var(--font-heading)] text-xl font-semibold text-brown-dark">
           {activeLabel}
@@ -173,7 +213,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <main className="p-4">
+      <main className="p-4 pb-20 sm:pb-4">
         {activePage === "dashboard" ? (
           <ActiveComponent onNavigate={handleDashboardNavigate} />
         ) : (
@@ -181,6 +221,36 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         )}
         {children}
       </main>
+
+      {/* Bottom navigation bar (mobile only) */}
+      <nav className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t border-cream-dark bg-cream-dark py-2 sm:hidden">
+        {[
+          { key: "dashboard" as PageKey, icon: "⌂", label: "Accueil" },
+          { key: "encaissement" as PageKey, icon: "↓", label: "Recette" },
+          { key: "decaissement" as PageKey, icon: "↑", label: "Dépense" },
+          { key: "balance" as PageKey, icon: "⚖", label: "Balance" },
+        ].map((item) => (
+          <button
+            key={item.key}
+            onClick={() => handleNavClick(item.key)}
+            className={`flex flex-col items-center gap-0.5 px-2 py-1 text-xs transition-colors ${
+              activePage === item.key
+                ? "font-semibold text-gold"
+                : "text-brown"
+            }`}
+          >
+            <span className="text-xl">{item.icon}</span>
+            <span>{item.label}</span>
+          </button>
+        ))}
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className={`flex flex-col items-center gap-0.5 px-2 py-1 text-xs text-brown transition-colors`}
+        >
+          <span className="text-xl">···</span>
+          <span>Plus</span>
+        </button>
+      </nav>
     </div>
   );
 }

@@ -539,6 +539,60 @@ export default function Balance() {
 
           {/* 6-Month Trend */}
           {monthlyData.length >= 2 && <TrendSparkline data={monthlyData} />}
+
+          {/* Cash Flow Forecast */}
+          {monthlyData.length >= 1 && (() => {
+            const avgEnc = monthlyData.reduce((s, m) => s + m.totalEnc, 0) / monthlyData.length;
+            const avgDec = monthlyData.reduce((s, m) => s + m.totalDec, 0) / monthlyData.length;
+            const avgSolde = avgEnc - avgDec;
+
+            const now = new Date();
+            const projected = Array.from({ length: 3 }, (_, i) => {
+              const d = new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
+              const label = d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+              return {
+                label: label.charAt(0).toUpperCase() + label.slice(1),
+                enc: avgEnc,
+                dec: avgDec,
+                solde: avgSolde,
+              };
+            });
+
+            return (
+              <div className="rounded-xl border border-cream-dark bg-white p-5">
+                <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-brown">
+                  Pr&eacute;vision de tr&eacute;sorerie (3 mois)
+                </h3>
+                <p className="mb-4 text-[10px] text-brown">
+                  Bas&eacute;e sur la moyenne de {monthlyData.length} mois d&apos;historique
+                </p>
+                <div className="-mx-2 overflow-x-auto px-2 sm:mx-0 sm:px-0">
+                  <table className="w-full min-w-[480px] text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-cream-dark">
+                        <th className="pb-3 pr-3 text-xs font-semibold uppercase tracking-wide text-brown">Mois</th>
+                        <th className="pb-3 pr-3 text-right text-xs font-semibold uppercase tracking-wide text-brown">Enc. pr&eacute;vus</th>
+                        <th className="pb-3 pr-3 text-right text-xs font-semibold uppercase tracking-wide text-brown">D&eacute;c. pr&eacute;vus</th>
+                        <th className="pb-3 text-right text-xs font-semibold uppercase tracking-wide text-brown">Solde pr&eacute;vu</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {projected.map((p) => (
+                        <tr key={p.label} className="border-b border-cream-dark last:border-0">
+                          <td className="py-3 pr-3 whitespace-nowrap font-medium text-brown-dark">{p.label}</td>
+                          <td className="py-3 pr-3 whitespace-nowrap text-right font-semibold text-green">{formatMAD(p.enc)}</td>
+                          <td className="py-3 pr-3 whitespace-nowrap text-right font-semibold text-red">{formatMAD(p.dec)}</td>
+                          <td className={`py-3 whitespace-nowrap text-right font-semibold ${p.solde >= 0 ? "text-green" : "text-red"}`}>
+                            {p.solde >= 0 ? "+" : ""}{formatMAD(p.solde)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
         </>
       )}
     </div>

@@ -121,6 +121,30 @@ export async function POST(request: NextRequest) {
       categoryId = cat?.id ?? null;
     }
 
+    // Duplicate detection
+    const forceInsert = new URL(request.url).searchParams.get("force") === "true";
+
+    if (!forceInsert) {
+      const duplicates = await db
+        .select({ id: decaissements.id })
+        .from(decaissements)
+        .where(
+          and(
+            eq(decaissements.date, body.date),
+            eq(decaissements.amount, String(amount)),
+            eq(decaissements.description, body.description)
+          )
+        )
+        .limit(1);
+
+      if (duplicates.length > 0) {
+        return NextResponse.json(
+          { warning: "Un décaissement similaire existe déjà (même date, montant et description). Ajoutez ?force=true pour confirmer.", duplicate: true },
+          { status: 409 }
+        );
+      }
+    }
+
     const [created] = await db.insert(decaissements).values({
       date: body.date,
       reference: body.reference,

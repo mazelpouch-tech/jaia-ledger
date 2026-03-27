@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { formatMAD } from "@/lib/format";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface MonthlySummary {
   month: string;
@@ -38,16 +40,76 @@ export default function RecapMensuel() {
   const totalDec = data.reduce((s, r) => s + r.totalDec, 0);
   const soldeCumule = totalEnc - totalDec;
 
+  function handleExportPdf() {
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.setTextColor(60, 46, 30);
+    doc.text("Récapitulatif Mensuel", 14, 22);
+    doc.setFontSize(10);
+    doc.setTextColor(92, 74, 50);
+    doc.text("Riad JAÏA", 14, 30);
+
+    const tableData = data.map((row) => {
+      const solde = row.totalEnc - row.totalDec;
+      const marge = row.totalEnc > 0 ? ((solde / row.totalEnc) * 100).toFixed(1) + "%" : "0%";
+      return [
+        row.monthLabel || row.month,
+        formatMAD(row.totalEnc),
+        formatMAD(row.totalDec),
+        (solde >= 0 ? "+" : "") + formatMAD(solde),
+        marge,
+      ];
+    });
+
+    // Add totals row
+    tableData.push([
+      "TOTAL",
+      formatMAD(totalEnc),
+      formatMAD(totalDec),
+      (soldeCumule >= 0 ? "+" : "") + formatMAD(soldeCumule),
+      totalEnc > 0 ? ((soldeCumule / totalEnc) * 100).toFixed(1) + "%" : "0%",
+    ]);
+
+    autoTable(doc, {
+      startY: 36,
+      head: [["Mois", "Encaissements", "Décaissements", "Solde", "Marge"]],
+      body: tableData,
+      headStyles: { fillColor: [196, 151, 59], textColor: 255 },
+      alternateRowStyles: { fillColor: [250, 246, 241] },
+      styles: { fontSize: 9 },
+      didParseCell: (data) => {
+        if (data.row.index === tableData.length - 1) {
+          data.cell.styles.fontStyle = "bold";
+          data.cell.styles.fillColor = [240, 233, 223];
+        }
+      },
+    });
+
+    doc.save("recap-mensuel-riad-jaia.pdf");
+  }
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="font-[family-name:var(--font-heading)] text-3xl font-bold text-brown-dark">
-          R&eacute;capitulatif Mensuel
-        </h1>
-        <p className="mt-1 text-sm text-brown">
-          Synth&egrave;se mois par mois
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="font-[family-name:var(--font-heading)] text-3xl font-bold text-brown-dark">
+            R&eacute;capitulatif Mensuel
+          </h1>
+          <p className="mt-1 text-sm text-brown">
+            Synth&egrave;se mois par mois
+          </p>
+        </div>
+        <button
+          onClick={handleExportPdf}
+          disabled={loading || data.length === 0}
+          className="inline-flex items-center gap-2 rounded-lg border border-gold bg-gold/10 px-4 py-2.5 text-sm font-semibold text-gold transition-colors hover:bg-gold hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+          Exporter PDF
+        </button>
       </div>
 
       {/* Summary Cards */}

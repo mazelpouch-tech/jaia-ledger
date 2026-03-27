@@ -136,6 +136,30 @@ export async function POST(request: NextRequest) {
       roomId = room?.id ?? null;
     }
 
+    // Duplicate detection
+    const forceInsert = new URL(request.url).searchParams.get("force") === "true";
+
+    if (!forceInsert) {
+      const duplicates = await db
+        .select({ id: encaissements.id })
+        .from(encaissements)
+        .where(
+          and(
+            eq(encaissements.date, body.date),
+            eq(encaissements.amount, String(amount)),
+            eq(encaissements.description, body.description)
+          )
+        )
+        .limit(1);
+
+      if (duplicates.length > 0) {
+        return NextResponse.json(
+          { warning: "Un encaissement similaire existe déjà (même date, montant et description). Ajoutez ?force=true pour confirmer.", duplicate: true },
+          { status: 409 }
+        );
+      }
+    }
+
     const [created] = await db.insert(encaissements).values({
       date: body.date,
       reference: body.reference,

@@ -7,6 +7,7 @@ interface StatsData {
   avgRevenuePerDay: number;
   avgExpensePerDay: number;
   revpar: number;
+  numRooms: number;
   margin: number;
   encByRoom: { name: string; total: number }[];
   encByCategory: { name: string; total: number }[];
@@ -101,7 +102,7 @@ export default function Statistique() {
             {/* REVPAR */}
             <div className="rounded-xl border border-cream-dark bg-white p-5">
               <p className="text-xs font-semibold uppercase tracking-wide text-brown">
-                REVPAR (9 ch.)
+                REVPAR ({data.numRooms ?? 9} ch.)
               </p>
               <p className="mt-2 font-[family-name:var(--font-heading)] text-2xl font-bold text-gold">
                 {formatMAD(data.revpar ?? 0)}

@@ -33,6 +33,7 @@ export default function Decaissement() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Form state
   const [date, setDate] = useState(getTodayISO());
@@ -68,10 +69,24 @@ export default function Decaissement() {
     ? settings.currencies
     : ["MAD", "EUR", "USD", "GBP"];
 
+  function validate(): boolean {
+    const newErrors: Record<string, string> = {};
+    if (!montant || parseFloat(montant) <= 0) {
+      newErrors.montant = "Le montant doit être supérieur à 0";
+    }
+    if (date && date > getTodayISO()) {
+      newErrors.date = "La date ne peut pas être dans le futur";
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setErrors({});
     setSuccess(false);
+    if (!validate()) return;
     setSubmitting(true);
 
     try {
@@ -94,7 +109,21 @@ export default function Decaissement() {
         body: JSON.stringify(body),
       });
 
-      if (!res.ok) {
+      if (res.status === 409) {
+        const data = await res.json();
+        const confirm = window.confirm(data.warning + "\n\nVoulez-vous continuer ?");
+        if (confirm) {
+          const retryRes = await fetch("/api/decaissements?force=true", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          if (!retryRes.ok) throw new Error("Erreur lors de l'enregistrement");
+        } else {
+          setSubmitting(false);
+          return;
+        }
+      } else if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.message || "Erreur lors de l'enregistrement");
       }
@@ -156,9 +185,10 @@ export default function Decaissement() {
                 type="date"
                 required
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full rounded-lg border border-cream-dark bg-white px-3 py-2.5 text-sm text-brown-dark outline-none focus:border-gold focus:ring-1 focus:ring-gold"
+                onChange={(e) => { setDate(e.target.value); setErrors((prev) => { const { date: _, ...rest } = prev; return rest; }); }}
+                className={`w-full rounded-lg border ${errors.date ? "border-red" : "border-cream-dark"} bg-white px-3 py-2.5 text-sm text-brown-dark outline-none focus:border-gold focus:ring-1 focus:ring-gold`}
               />
+              {errors.date && <p className="mt-1 text-xs text-red">{errors.date}</p>}
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brown">
@@ -250,10 +280,11 @@ export default function Decaissement() {
                 min="0"
                 step="0.01"
                 value={montant}
-                onChange={(e) => setMontant(e.target.value)}
+                onChange={(e) => { setMontant(e.target.value); setErrors((prev) => { const { montant: _, ...rest } = prev; return rest; }); }}
                 placeholder="0.00"
-                className="w-full rounded-lg border border-cream-dark bg-white px-3 py-2.5 text-sm text-brown-dark outline-none focus:border-gold focus:ring-1 focus:ring-gold"
+                className={`w-full rounded-lg border ${errors.montant ? "border-red" : "border-cream-dark"} bg-white px-3 py-2.5 text-sm text-brown-dark outline-none focus:border-gold focus:ring-1 focus:ring-gold`}
               />
+              {errors.montant && <p className="mt-1 text-xs text-red">{errors.montant}</p>}
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brown">
