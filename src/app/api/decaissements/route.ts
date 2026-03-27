@@ -102,16 +102,35 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
+    // Accept both French (form) and English (API) field names
+    const categoryName = body.categorie || body.category;
+    const amount = body.montant ?? body.amount;
+    const paymentMethod = body.modeReglement || body.paymentMethod;
+    const currency = body.devise || body.currency || "MAD";
+    const exchangeRate = body.tauxChange ?? body.exchangeRate ?? "1";
+    const supplier = body.fournisseur || body.supplier;
+
+    // Look up categoryId by name if needed
+    let categoryId = body.categoryId;
+    if (!categoryId && categoryName) {
+      const [cat] = await db
+        .select({ id: categories.id })
+        .from(categories)
+        .where(and(eq(categories.name, categoryName), eq(categories.type, "decaissement")))
+        .limit(1);
+      categoryId = cat?.id ?? null;
+    }
+
     const [created] = await db.insert(decaissements).values({
       date: body.date,
       reference: body.reference,
-      categoryId: body.categoryId,
-      supplier: body.supplier,
+      categoryId,
+      supplier,
       description: body.description,
-      currency: body.currency || "MAD",
-      amount: body.amount,
-      exchangeRate: body.exchangeRate || "1",
-      paymentMethod: body.paymentMethod,
+      currency,
+      amount: String(amount),
+      exchangeRate: String(exchangeRate),
+      paymentMethod,
       notes: body.notes,
     }).returning();
 

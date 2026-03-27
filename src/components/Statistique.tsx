@@ -4,13 +4,13 @@ import { useState, useEffect } from "react";
 import { formatMAD, getMonthKey } from "@/lib/format";
 
 interface StatsData {
-  recetteMoyenneJour: number;
-  depenseMoyenneJour: number;
+  avgRevenuePerDay: number;
+  avgExpensePerDay: number;
   revpar: number;
-  margeNette: number;
-  recettesParChambre: { chambre: string; montant: number }[];
-  topCategoriesRecettes: { categorie: string; montant: number }[];
-  topCategoriesDepenses: { categorie: string; montant: number }[];
+  margin: number;
+  encByRoom: { name: string; total: number }[];
+  encByCategory: { name: string; total: number }[];
+  decByCategory: { name: string; total: number }[];
 }
 
 function buildMonthOptions(): { value: string; label: string }[] {
@@ -41,8 +41,8 @@ export default function Statistique() {
       .finally(() => setLoading(false));
   }, [month]);
 
-  const maxChambre = data?.recettesParChambre?.length
-    ? Math.max(...data.recettesParChambre.map((c) => c.montant), 1)
+  const maxChambre = data?.encByRoom?.length
+    ? Math.max(...data.encByRoom.map((c) => c.total), 1)
     : 1;
 
   return (
@@ -84,7 +84,7 @@ export default function Statistique() {
                 Recette moyenne / jour
               </p>
               <p className="mt-2 font-[family-name:var(--font-heading)] text-2xl font-bold text-green">
-                {formatMAD(data.recetteMoyenneJour ?? 0)}
+                {formatMAD(data.avgRevenuePerDay ?? 0)}
               </p>
             </div>
 
@@ -94,7 +94,7 @@ export default function Statistique() {
                 D&eacute;pense moyenne / jour
               </p>
               <p className="mt-2 font-[family-name:var(--font-heading)] text-2xl font-bold text-red">
-                {formatMAD(data.depenseMoyenneJour ?? 0)}
+                {formatMAD(data.avgExpensePerDay ?? 0)}
               </p>
             </div>
 
@@ -115,34 +115,34 @@ export default function Statistique() {
               </p>
               <p
                 className={`mt-2 font-[family-name:var(--font-heading)] text-2xl font-bold ${
-                  (data.margeNette ?? 0) >= 0 ? "text-green" : "text-red"
+                  (data.margin ?? 0) >= 0 ? "text-green" : "text-red"
                 }`}
               >
-                {(data.margeNette ?? 0).toFixed(1)}%
+                {(data.margin ?? 0).toFixed(1)}%
               </p>
             </div>
           </div>
 
           {/* Recettes par chambre */}
-          {data.recettesParChambre && data.recettesParChambre.length > 0 && (
+          {data.encByRoom && data.encByRoom.length > 0 && (
             <div className="rounded-xl border border-cream-dark bg-white p-5">
               <h2 className="mb-4 font-[family-name:var(--font-heading)] text-xl font-semibold text-brown-dark">
                 Recettes par chambre
               </h2>
               <div className="space-y-3">
-                {data.recettesParChambre.map((ch) => (
-                  <div key={ch.chambre} className="flex items-center gap-3">
+                {data.encByRoom.map((ch) => (
+                  <div key={ch.name} className="flex items-center gap-3">
                     <span className="w-16 shrink-0 text-sm font-medium text-brown-dark">
-                      {ch.chambre}
+                      {ch.name}
                     </span>
                     <div className="relative h-7 flex-1 overflow-hidden rounded-md bg-cream">
                       <div
                         className="absolute inset-y-0 left-0 rounded-md bg-gold/80"
-                        style={{ width: `${Math.max((ch.montant / maxChambre) * 100, 2)}%` }}
+                        style={{ width: `${Math.max((ch.total / maxChambre) * 100, 2)}%` }}
                       />
                     </div>
                     <span className="w-28 shrink-0 text-right text-sm font-semibold text-brown-dark">
-                      {formatMAD(ch.montant)}
+                      {formatMAD(ch.total)}
                     </span>
                   </div>
                 ))}
@@ -151,25 +151,25 @@ export default function Statistique() {
           )}
 
           {/* Top categories recettes */}
-          {data.topCategoriesRecettes && data.topCategoriesRecettes.length > 0 && (
+          {data.encByCategory && data.encByCategory.length > 0 && (
             <div className="rounded-xl border border-cream-dark bg-white p-5">
               <h2 className="mb-4 font-[family-name:var(--font-heading)] text-xl font-semibold text-brown-dark">
                 Top cat&eacute;gories recettes
               </h2>
               <div className="space-y-2">
-                {data.topCategoriesRecettes.map((cat, i) => (
+                {data.encByCategory.map((cat, i) => (
                   <div
-                    key={cat.categorie}
+                    key={cat.name}
                     className="flex items-center justify-between rounded-lg bg-green-light px-4 py-3"
                   >
                     <div className="flex items-center gap-3">
                       <span className="flex h-6 w-6 items-center justify-center rounded-full bg-green/10 text-xs font-bold text-green">
                         {i + 1}
                       </span>
-                      <span className="text-sm font-medium text-brown-dark">{cat.categorie}</span>
+                      <span className="text-sm font-medium text-brown-dark">{cat.name}</span>
                     </div>
                     <span className="text-sm font-semibold text-green">
-                      {formatMAD(cat.montant)}
+                      {formatMAD(cat.total)}
                     </span>
                   </div>
                 ))}
@@ -178,25 +178,25 @@ export default function Statistique() {
           )}
 
           {/* Top categories depenses */}
-          {data.topCategoriesDepenses && data.topCategoriesDepenses.length > 0 && (
+          {data.decByCategory && data.decByCategory.length > 0 && (
             <div className="rounded-xl border border-cream-dark bg-white p-5">
               <h2 className="mb-4 font-[family-name:var(--font-heading)] text-xl font-semibold text-brown-dark">
                 Top cat&eacute;gories d&eacute;penses
               </h2>
               <div className="space-y-2">
-                {data.topCategoriesDepenses.map((cat, i) => (
+                {data.decByCategory.map((cat, i) => (
                   <div
-                    key={cat.categorie}
+                    key={cat.name}
                     className="flex items-center justify-between rounded-lg bg-red-light px-4 py-3"
                   >
                     <div className="flex items-center gap-3">
                       <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red/10 text-xs font-bold text-red">
                         {i + 1}
                       </span>
-                      <span className="text-sm font-medium text-brown-dark">{cat.categorie}</span>
+                      <span className="text-sm font-medium text-brown-dark">{cat.name}</span>
                     </div>
                     <span className="text-sm font-semibold text-red">
-                      {formatMAD(cat.montant)}
+                      {formatMAD(cat.total)}
                     </span>
                   </div>
                 ))}

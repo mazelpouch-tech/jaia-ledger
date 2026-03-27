@@ -6,16 +6,16 @@ import { formatMAD, getCurrentMonth, getMonthKey, formatDateShort } from "@/lib/
 interface StatsData {
   totalEncaissements: number;
   totalDecaissements: number;
-  variationEncaissements: number;
-  variationDecaissements: number;
+  prevMonthEncaissements: number;
+  prevMonthDecaissements: number;
 }
 
 interface Transaction {
   id: string;
   date: string;
   description: string;
-  montant: number;
-  categorie: string;
+  amount: string;
+  categoryName: string | null;
 }
 
 interface DashboardProps {
@@ -118,10 +118,12 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           <p className="mt-2 font-[family-name:var(--font-heading)] text-2xl font-bold text-green">
             {loading ? "..." : formatMAD(stats?.totalEncaissements ?? 0)}
           </p>
-          {stats && stats.variationEncaissements !== undefined && (
+          {stats && stats.prevMonthEncaissements > 0 && (
             <p className="mt-1 text-xs text-brown">
-              {stats.variationEncaissements >= 0 ? "↗" : "↘"}{" "}
-              {Math.abs(stats.variationEncaissements).toFixed(0)}% vs mois pr&eacute;c&eacute;dent
+              {(() => {
+                const variation = ((stats.totalEncaissements - stats.prevMonthEncaissements) / stats.prevMonthEncaissements) * 100;
+                return `${variation >= 0 ? "↗" : "↘"} ${Math.abs(variation).toFixed(0)}% vs mois précédent`;
+              })()}
             </p>
           )}
         </div>
@@ -133,10 +135,12 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           <p className="mt-2 font-[family-name:var(--font-heading)] text-2xl font-bold text-red">
             {loading ? "..." : formatMAD(stats?.totalDecaissements ?? 0)}
           </p>
-          {stats && stats.variationDecaissements !== undefined && (
+          {stats && stats.prevMonthDecaissements > 0 && (
             <p className="mt-1 text-xs text-brown">
-              {stats.variationDecaissements >= 0 ? "↗" : "↘"}{" "}
-              {Math.abs(stats.variationDecaissements).toFixed(0)}% vs mois pr&eacute;c&eacute;dent
+              {(() => {
+                const variation = ((stats.totalDecaissements - stats.prevMonthDecaissements) / stats.prevMonthDecaissements) * 100;
+                return `${variation >= 0 ? "↗" : "↘"} ${Math.abs(variation).toFixed(0)}% vs mois précédent`;
+              })()}
             </p>
           )}
         </div>
@@ -176,15 +180,15 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                     <span className="text-xs text-brown">
                       {formatDateShort(tx.date)}
                     </span>
-                    {tx.categorie && (
+                    {tx.categoryName && (
                       <span className="rounded-full bg-green-light px-2 py-0.5 text-[10px] font-medium text-green">
-                        {tx.categorie}
+                        {tx.categoryName}
                       </span>
                     )}
                   </div>
                 </div>
                 <span className="ml-3 whitespace-nowrap text-sm font-semibold text-green">
-                  +{formatMAD(tx.montant)}
+                  +{formatMAD(parseFloat(tx.amount))}
                 </span>
               </div>
             ))}
@@ -226,15 +230,15 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                     <span className="text-xs text-brown">
                       {formatDateShort(tx.date)}
                     </span>
-                    {tx.categorie && (
+                    {tx.categoryName && (
                       <span className="rounded-full bg-red-light px-2 py-0.5 text-[10px] font-medium text-red">
-                        {tx.categorie}
+                        {tx.categoryName}
                       </span>
                     )}
                   </div>
                 </div>
                 <span className="ml-3 whitespace-nowrap text-sm font-semibold text-red">
-                  -{formatMAD(tx.montant)}
+                  -{formatMAD(parseFloat(tx.amount))}
                 </span>
               </div>
             ))}

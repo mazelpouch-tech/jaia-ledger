@@ -5,11 +5,11 @@ import { formatMAD } from "@/lib/format";
 
 interface MonthlySummary {
   month: string;
-  label: string;
-  encaissements: number;
-  decaissements: number;
+  monthLabel: string;
+  totalEnc: number;
+  totalDec: number;
   solde: number;
-  marge: number;
+  margin: number;
 }
 
 export default function RecapMensuel() {
@@ -34,8 +34,8 @@ export default function RecapMensuel() {
     fetchData();
   }, []);
 
-  const totalEnc = data.reduce((s, r) => s + r.encaissements, 0);
-  const totalDec = data.reduce((s, r) => s + r.decaissements, 0);
+  const totalEnc = data.reduce((s, r) => s + r.totalEnc, 0);
+  const totalDec = data.reduce((s, r) => s + r.totalDec, 0);
   const soldeCumule = totalEnc - totalDec;
 
   return (
@@ -113,10 +113,10 @@ export default function RecapMensuel() {
             </thead>
             <tbody>
               {data.map((row) => {
-                const rowSolde = row.encaissements - row.decaissements;
+                const rowSolde = row.totalEnc - row.totalDec;
                 const rowMarge =
-                  row.encaissements > 0
-                    ? ((rowSolde / row.encaissements) * 100)
+                  row.totalEnc > 0
+                    ? ((rowSolde / row.totalEnc) * 100)
                     : 0;
                 return (
                   <tr
@@ -124,17 +124,17 @@ export default function RecapMensuel() {
                     className="border-b border-cream-dark last:border-0"
                   >
                     <td className="py-3 pr-3 whitespace-nowrap font-medium text-brown-dark">
-                      {row.label ||
+                      {row.monthLabel ||
                         new Date(row.month + "-01").toLocaleDateString("fr-FR", {
                           month: "long",
                           year: "numeric",
                         })}
                     </td>
                     <td className="py-3 pr-3 whitespace-nowrap text-right font-semibold text-green">
-                      {formatMAD(row.encaissements)}
+                      {formatMAD(row.totalEnc)}
                     </td>
                     <td className="py-3 pr-3 whitespace-nowrap text-right font-semibold text-red">
-                      {formatMAD(row.decaissements)}
+                      {formatMAD(row.totalDec)}
                     </td>
                     <td
                       className={`py-3 pr-3 whitespace-nowrap text-right font-semibold ${

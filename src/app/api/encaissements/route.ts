@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { encaissements, categories, rooms } from "@/db/schema";
-import { eq, and, or, ilike, sql, desc, sum, count } from "drizzle-orm";
+import { eq, and, or, ilike, sql, desc } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
   try {
@@ -106,19 +106,49 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
+    // Accept both French (form) and English (API) field names
+    const categoryName = body.categorie || body.category;
+    const roomName = body.chambre || body.room;
+    const amount = body.montant ?? body.amount;
+    const paymentMethod = body.modeReglement || body.paymentMethod;
+    const currency = body.devise || body.currency || "MAD";
+    const exchangeRate = body.tauxChange ?? body.exchangeRate ?? "1";
+
+    // Look up categoryId by name if needed
+    let categoryId = body.categoryId;
+    if (!categoryId && categoryName) {
+      const [cat] = await db
+        .select({ id: categories.id })
+        .from(categories)
+        .where(and(eq(categories.name, categoryName), eq(categories.type, "encaissement")))
+        .limit(1);
+      categoryId = cat?.id ?? null;
+    }
+
+    // Look up roomId by name if needed
+    let roomId = body.roomId;
+    if (!roomId && roomName) {
+      const [room] = await db
+        .select({ id: rooms.id })
+        .from(rooms)
+        .where(eq(rooms.name, roomName))
+        .limit(1);
+      roomId = room?.id ?? null;
+    }
+
     const [created] = await db.insert(encaissements).values({
       date: body.date,
       reference: body.reference,
       checkIn: body.checkIn,
       checkOut: body.checkOut,
-      categoryId: body.categoryId,
-      roomId: body.roomId,
+      categoryId,
+      roomId,
       client: body.client,
       description: body.description,
-      currency: body.currency || "MAD",
-      amount: body.amount,
-      exchangeRate: body.exchangeRate || "1",
-      paymentMethod: body.paymentMethod,
+      currency,
+      amount: String(amount),
+      exchangeRate: String(exchangeRate),
+      paymentMethod,
     }).returning();
 
     return NextResponse.json(created, { status: 201 });
