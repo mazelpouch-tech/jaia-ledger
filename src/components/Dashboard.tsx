@@ -1,337 +1,269 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { formatMAD, getCurrentMonth, getMonthKey, formatDateShort } from "@/lib/format";
+import { useState, useEffect, useMemo } from "react";
+import { formatMAD, getMonthKey } from "@/lib/format";
 
-interface StatsData {
-  totalEncaissements: number;
-  totalDecaissements: number;
-  prevMonthEncaissements: number;
-  prevMonthDecaissements: number;
+interface MethodTotal {
+  method: string;
+  total: number;
 }
 
-interface Transaction {
-  id: string;
-  date: string;
-  description: string;
-  amount: string;
-  categoryName: string | null;
+interface CurrencyTotal {
+  currency: string;
+  total: number;
+}
+
+interface CurrencyRate {
+  code: string;
+  rate: number;
+}
+
+interface DashboardData {
+  encByMethod: MethodTotal[];
+  decByMethod: MethodTotal[];
+  totalEncaissements: number;
+  totalDecaissements: number;
+  encByCurrency: CurrencyTotal[];
+  decByCurrency: CurrencyTotal[];
+  currencyRates: CurrencyRate[];
 }
 
 interface DashboardProps {
   onNavigate?: (page: string) => void;
 }
 
+const METHOD_CONFIG: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
+  "Espèces": {
+    label: "ESPECES",
+    icon: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/></svg>,
+    color: "text-accent",
+  },
+  "Carte bancaire": {
+    label: "CARTE",
+    icon: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>,
+    color: "text-accent",
+  },
+  "Virement": {
+    label: "VIREMENT",
+    icon: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 010-4h14v4"/><path d="M3 5v14a2 2 0 002 2h16v-5"/><path d="M18 12a2 2 0 000 4h4v-4z"/></svg>,
+    color: "text-accent",
+  },
+  "Chèque": {
+    label: "CHEQUE",
+    icon: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
+    color: "text-accent",
+  },
+};
+
+const ALL_METHODS = ["Espèces", "Carte bancaire", "Virement", "Chèque"];
+
+function formatFrenchDateRange(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  const start = new Date(y, m - 1, 1);
+  const end = new Date();
+  const startStr = start.toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+  const endStr = end.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+  return `${startStr} \u2014 ${endStr}`;
+}
+
 export default function Dashboard({ onNavigate }: DashboardProps) {
-  const [stats, setStats] = useState<StatsData | null>(null);
-  const [recentEncaissements, setRecentEncaissements] = useState<Transaction[]>([]);
-  const [recentDecaissements, setRecentDecaissements] = useState<Transaction[]>([]);
+  const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const currentMonth = getCurrentMonth();
   const monthKey = getMonthKey();
 
   useEffect(() => {
-    async function fetchData() {
-      try {
-        const [statsRes, encRes, decRes] = await Promise.all([
-          fetch(`/api/stats?month=${monthKey}`),
-          fetch(`/api/encaissements?limit=5`),
-          fetch(`/api/decaissements?limit=5`),
-        ]);
-        if (statsRes.ok) {
-          const statsData = await statsRes.json();
-          setStats(statsData);
-        }
-        if (encRes.ok) {
-          const encData = await encRes.json();
-          setRecentEncaissements(Array.isArray(encData) ? encData : encData.data ?? []);
-        }
-        if (decRes.ok) {
-          const decData = await decRes.json();
-          setRecentDecaissements(Array.isArray(decData) ? decData : decData.data ?? []);
-        }
-      } catch {
-        // silently handle fetch errors
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchData();
+    fetch(`/api/stats/dashboard?month=${monthKey}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d) setData(d); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [monthKey]);
 
-  const navigate = (page: string) => {
-    onNavigate?.(page);
-  };
+  const navigate = (page: string) => onNavigate?.(page);
+
+  const methodTotals = useMemo(() => {
+    if (!data) return ALL_METHODS.map((m) => ({ method: m, total: 0 }));
+    return ALL_METHODS.map((method) => ({
+      method,
+      total: data.encByMethod.find((e) => e.method === method)?.total ?? 0,
+    }));
+  }, [data]);
+
+  // Cash balance: income cash - expense cash
+  const cashBalance = useMemo(() => {
+    if (!data) return { encCash: 0, decCash: 0, balance: 0 };
+    const encCash = data.encByMethod.find((e) => e.method === "Espèces")?.total ?? 0;
+    const decCash = data.decByMethod.find((e) => e.method === "Espèces")?.total ?? 0;
+    return { encCash, decCash, balance: encCash - decCash };
+  }, [data]);
+
+  // Net currency breakdown (enc - dec per currency)
+  const currencyBreakdown = useMemo(() => {
+    if (!data) return [];
+    const map = new Map<string, number>();
+    for (const e of data.encByCurrency) {
+      map.set(e.currency || "MAD", (map.get(e.currency || "MAD") ?? 0) + e.total);
+    }
+    for (const d of data.decByCurrency) {
+      map.set(d.currency || "MAD", (map.get(d.currency || "MAD") ?? 0) - d.total);
+    }
+    const rateMap = new Map(data.currencyRates.map((r) => [r.code, r.rate]));
+    return Array.from(map.entries()).map(([currency, total]) => ({
+      currency,
+      total,
+      madEquivalent: currency === "MAD" ? total : total * (rateMap.get(currency) ?? 1),
+    }));
+  }, [data]);
+
+  const totalEnc = data?.totalEncaissements ?? 0;
+  const totalDec = data?.totalDecaissements ?? 0;
+  const fluxNet = totalEnc - totalDec;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      {/* Header */}
-      <div className="text-center">
-        <h1 className="font-[family-name:var(--font-heading)] text-3xl font-bold text-brown-dark">
-          Bienvenue, Riad JA&Iuml;A
-        </h1>
-        <p className="mt-1 text-sm text-brown">
-          Tableau de bord &mdash; {currentMonth}
-        </p>
+    <div className="space-y-5">
+      {/* Cumulative header */}
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-main-muted">
+          Encaissements Cumulatifs
+        </h2>
+        <span className="rounded-full bg-green/10 px-3 py-0.5 text-xs font-medium text-green">
+          {formatFrenchDateRange(monthKey)}
+        </span>
       </div>
 
-      {/* Quick Actions */}
-      <div className="space-y-3">
+      {/* Payment method cards */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {methodTotals.map(({ method, total }) => {
+          const config = METHOD_CONFIG[method] ?? { label: method.toUpperCase(), icon: null, color: "text-accent" };
+          return (
+            <div
+              key={method}
+              className="rounded-xl border border-card-border bg-card-bg p-4 transition-shadow hover:shadow-md"
+            >
+              <div className="mb-2 flex items-center gap-2">
+                <span className={config.color}>{config.icon}</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-main-muted">
+                  {config.label}
+                </span>
+              </div>
+              <p className="font-[family-name:var(--font-heading)] text-lg font-bold text-main-text sm:text-xl">
+                {formatMAD(total)}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Enc / Dec / Flux net summary */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <button
           onClick={() => navigate("Encaissement")}
-          className="flex w-full items-center gap-4 rounded-xl bg-green-light px-5 py-4 text-left transition-transform active:scale-[0.98]"
+          className="flex items-center gap-3 rounded-xl border border-card-border bg-card-bg p-4 text-left transition-shadow hover:shadow-md"
         >
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green/10 text-xl text-green">
-            &darr;
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-green/10">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-green"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
           </span>
-          <span className="text-lg font-semibold text-green">Enregistrer recette</span>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-main-muted">Encaissement</p>
+            <p className="font-[family-name:var(--font-heading)] text-lg font-bold text-green">{formatMAD(totalEnc)}</p>
+          </div>
         </button>
 
         <button
           onClick={() => navigate("Décaissement")}
-          className="flex w-full items-center gap-4 rounded-xl bg-amber-light px-5 py-4 text-left transition-transform active:scale-[0.98]"
+          className="flex items-center gap-3 rounded-xl border border-card-border bg-card-bg p-4 text-left transition-shadow hover:shadow-md"
         >
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-red/10 text-xl text-red">
-            &uarr;
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-red/10">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-red"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
           </span>
-          <span className="text-lg font-semibold text-red">Enregistrer d&eacute;pense</span>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-main-muted">Decaissement</p>
+            <p className="font-[family-name:var(--font-heading)] text-lg font-bold text-red">{formatMAD(totalDec)}</p>
+          </div>
         </button>
 
         <button
           onClick={() => navigate("Balance")}
-          className="flex w-full items-center gap-4 rounded-xl bg-amber-light px-5 py-4 text-left transition-transform active:scale-[0.98]"
+          className="flex items-center gap-3 rounded-xl border border-card-border bg-card-bg p-4 text-left transition-shadow hover:shadow-md"
         >
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gold/10 text-xl text-gold">
-            &#9878;
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/10">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-accent"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
           </span>
-          <span className="text-lg font-semibold text-gold">Voir la balance</span>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-main-muted">Flux Net</p>
+            <p className={`font-[family-name:var(--font-heading)] text-lg font-bold ${fluxNet >= 0 ? "text-green" : "text-red"}`}>
+              {formatMAD(fluxNet)}
+            </p>
+          </div>
         </button>
       </div>
 
-      {/* Solde Card */}
-      {!loading && stats && (
-        <div className="rounded-xl border border-cream-dark bg-white p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-brown">
-                Solde du mois
-              </p>
-              <p
-                className={`mt-2 font-[family-name:var(--font-heading)] text-3xl font-bold ${
-                  (stats.totalEncaissements - stats.totalDecaissements) >= 0
-                    ? "text-green"
-                    : "text-red"
-                }`}
-              >
-                {(stats.totalEncaissements - stats.totalDecaissements) >= 0 ? "+" : ""}
-                {formatMAD(stats.totalEncaissements - stats.totalDecaissements)}
-              </p>
-            </div>
-            <div
-              className={`flex h-14 w-14 items-center justify-center rounded-full text-2xl ${
-                (stats.totalEncaissements - stats.totalDecaissements) >= 0
-                  ? "bg-green-light text-green"
-                  : "bg-red-light text-red"
-              }`}
-            >
-              {(stats.totalEncaissements - stats.totalDecaissements) >= 0 ? "↗" : "↘"}
-            </div>
+      {/* Cash balance card */}
+      <div className="rounded-xl border border-card-border bg-green/5 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-main-muted">
+              Solde Espèces Cumulatif
+            </p>
+            <p className="mt-0.5 text-xs text-main-muted">
+              Espèces reçues ({formatMAD(cashBalance.encCash)}) – Dépenses espèces ({formatMAD(cashBalance.decCash)}) du {formatFrenchDateRange(monthKey)}
+            </p>
           </div>
-          {/* Proportional bar */}
-          {(stats.totalEncaissements > 0 || stats.totalDecaissements > 0) && (
-            <div className="mt-4">
-              <div className="flex h-3 overflow-hidden rounded-full">
-                <div
-                  className="bg-green transition-all duration-500"
-                  style={{
-                    width: `${(stats.totalEncaissements / (stats.totalEncaissements + stats.totalDecaissements)) * 100}%`,
-                  }}
-                />
-                <div
-                  className="bg-red transition-all duration-500"
-                  style={{
-                    width: `${(stats.totalDecaissements / (stats.totalEncaissements + stats.totalDecaissements)) * 100}%`,
-                  }}
-                />
-              </div>
-              <div className="mt-1.5 flex justify-between text-[10px] font-medium">
-                <span className="text-green">
-                  Recettes {((stats.totalEncaissements / (stats.totalEncaissements + stats.totalDecaissements)) * 100).toFixed(0)}%
-                </span>
-                <span className="text-red">
-                  Dépenses {((stats.totalDecaissements / (stats.totalEncaissements + stats.totalDecaissements)) * 100).toFixed(0)}%
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="rounded-xl border border-cream-dark bg-white p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brown">
-            Encaissements du mois
-          </p>
-          <p className="mt-2 font-[family-name:var(--font-heading)] text-2xl font-bold text-green">
-            {loading ? "..." : formatMAD(stats?.totalEncaissements ?? 0)}
-          </p>
-          {stats && stats.prevMonthEncaissements > 0 && (
-            <p className="mt-1 text-xs text-brown">
-              {(() => {
-                const variation = ((stats.totalEncaissements - stats.prevMonthEncaissements) / stats.prevMonthEncaissements) * 100;
-                return `${variation >= 0 ? "↗" : "↘"} ${Math.abs(variation).toFixed(0)}% vs mois précédent`;
-              })()}
+          <div className="text-right">
+            <p className={`font-[family-name:var(--font-heading)] text-2xl font-bold ${cashBalance.balance >= 0 ? "text-green" : "text-red"}`}>
+              {formatMAD(cashBalance.balance)}
             </p>
-          )}
-        </div>
-
-        <div className="rounded-xl border border-cream-dark bg-white p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brown">
-            D&eacute;caissements du mois
-          </p>
-          <p className="mt-2 font-[family-name:var(--font-heading)] text-2xl font-bold text-red">
-            {loading ? "..." : formatMAD(stats?.totalDecaissements ?? 0)}
-          </p>
-          {stats && stats.prevMonthDecaissements > 0 && (
-            <p className="mt-1 text-xs text-brown">
-              {(() => {
-                const variation = ((stats.totalDecaissements - stats.prevMonthDecaissements) / stats.prevMonthDecaissements) * 100;
-                return `${variation >= 0 ? "↗" : "↘"} ${Math.abs(variation).toFixed(0)}% vs mois précédent`;
-              })()}
-            </p>
-          )}
+            {cashBalance.balance > 0 && (
+              <p className="text-xs font-medium text-green">A remettre en caisse</p>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Alerts */}
-      {!loading && stats && stats.totalEncaissements > 0 && (
-        <>
-          {stats.totalDecaissements > stats.totalEncaissements && (
-            <div className="flex items-center gap-3 rounded-xl border border-red/20 bg-red-light px-5 py-4">
-              <span className="text-2xl">&#9888;</span>
-              <div>
-                <p className="text-sm font-semibold text-red">Attention : d&eacute;penses sup&eacute;rieures aux recettes</p>
-                <p className="text-xs text-brown">
-                  D&eacute;ficit de {formatMAD(stats.totalDecaissements - stats.totalEncaissements)} ce mois
-                </p>
-              </div>
-            </div>
-          )}
-          {stats.totalDecaissements <= stats.totalEncaissements && stats.totalDecaissements > stats.totalEncaissements * 0.8 && (
-            <div className="flex items-center gap-3 rounded-xl border border-gold/20 bg-amber-light px-5 py-4">
-              <span className="text-2xl">&#9889;</span>
-              <div>
-                <p className="text-sm font-semibold text-gold">Vigilance : d&eacute;penses &eacute;lev&eacute;es</p>
-                <p className="text-xs text-brown">
-                  Les d&eacute;penses repr&eacute;sentent {((stats.totalDecaissements / stats.totalEncaissements) * 100).toFixed(0)}% des recettes
-                </p>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Recent Encaissements */}
-      <div>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-[family-name:var(--font-heading)] text-xl font-semibold text-brown-dark">
-            Derniers encaissements
-          </h2>
-          <button
-            onClick={() => navigate("Encaissement")}
-            className="text-sm font-medium text-gold hover:underline"
-          >
-            Voir tout
-          </button>
-        </div>
-        {loading ? (
-          <p className="py-4 text-center text-sm text-brown">Chargement...</p>
-        ) : recentEncaissements.length === 0 ? (
-          <p className="rounded-lg border border-cream-dark bg-white py-6 text-center text-sm text-brown">
-            Aucun encaissement ce mois
+      {/* Currency breakdown */}
+      {currencyBreakdown.length > 0 && (
+        <div className="rounded-xl border border-card-border bg-card-bg p-5">
+          <p className="mb-4 text-xs font-bold uppercase tracking-wider text-main-muted">
+            Composition par Devise
           </p>
-        ) : (
-          <div className="space-y-2">
-            {recentEncaissements.map((tx) => (
-              <div
-                key={tx.id}
-                className="flex items-center justify-between rounded-lg border border-cream-dark bg-white px-4 py-3"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-brown-dark">
-                    {tx.description}
-                  </p>
-                  <div className="mt-0.5 flex items-center gap-2">
-                    <span className="text-xs text-brown">
-                      {formatDateShort(tx.date)}
-                    </span>
-                    {tx.categoryName && (
-                      <span className="rounded-full bg-green-light px-2 py-0.5 text-[10px] font-medium text-green">
-                        {tx.categoryName}
-                      </span>
-                    )}
-                  </div>
+          <div className="space-y-3">
+            {currencyBreakdown.map(({ currency, total, madEquivalent }) => (
+              <div key={currency} className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-7 w-11 items-center justify-center rounded border border-card-border text-[10px] font-bold text-main-muted">
+                    {currency || "MAD"}
+                  </span>
+                  <span className={`text-sm font-medium ${total >= 0 ? "text-main-text" : "text-red"}`}>
+                    {total >= 0 ? "" : "-"}{new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(total))} {currency || "MAD"}
+                  </span>
                 </div>
-                <span className="ml-3 whitespace-nowrap text-sm font-semibold text-green">
-                  +{formatMAD(parseFloat(tx.amount))}
-                </span>
+                {currency !== "MAD" && (
+                  <span className="text-xs text-main-muted">
+                    = {formatMAD(madEquivalent)}
+                  </span>
+                )}
               </div>
             ))}
-          </div>
-        )}
-      </div>
-
-      {/* Recent Decaissements */}
-      <div>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-[family-name:var(--font-heading)] text-xl font-semibold text-brown-dark">
-            Derni&egrave;res d&eacute;penses
-          </h2>
-          <button
-            onClick={() => navigate("Décaissement")}
-            className="text-sm font-medium text-gold hover:underline"
-          >
-            Voir tout
-          </button>
-        </div>
-        {loading ? (
-          <p className="py-4 text-center text-sm text-brown">Chargement...</p>
-        ) : recentDecaissements.length === 0 ? (
-          <p className="rounded-lg border border-cream-dark bg-white py-6 text-center text-sm text-brown">
-            Aucune d&eacute;pense ce mois
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {recentDecaissements.map((tx) => (
-              <div
-                key={tx.id}
-                className="flex items-center justify-between rounded-lg border border-cream-dark bg-white px-4 py-3"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-brown-dark">
-                    {tx.description}
-                  </p>
-                  <div className="mt-0.5 flex items-center gap-2">
-                    <span className="text-xs text-brown">
-                      {formatDateShort(tx.date)}
-                    </span>
-                    {tx.categoryName && (
-                      <span className="rounded-full bg-red-light px-2 py-0.5 text-[10px] font-medium text-red">
-                        {tx.categoryName}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <span className="ml-3 whitespace-nowrap text-sm font-semibold text-red">
-                  -{formatMAD(parseFloat(tx.amount))}
+            <div className="border-t border-card-border pt-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-main-muted">Total converti</span>
+                <span className={`font-[family-name:var(--font-heading)] text-base font-bold ${cashBalance.balance >= 0 ? "text-main-text" : "text-red"}`}>
+                  {formatMAD(currencyBreakdown.reduce((sum, c) => sum + c.madEquivalent, 0))}
                 </span>
               </div>
-            ))}
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
