@@ -52,7 +52,11 @@ export default function Encaissement() {
         const res = await fetch("/api/settings");
         if (res.ok) {
           const data = await res.json();
-          setSettings(data);
+          setSettings({
+            categories: data.categories?.encaissement?.map((c: { name: string }) => c.name) ?? [],
+            rooms: data.rooms?.filter((r: { active: boolean }) => r.active).map((r: { name: string }) => r.name) ?? [],
+            currencies: data.currencies?.map((c: { code: string }) => c.code) ?? [],
+          });
         }
       } catch {
         // use defaults

@@ -73,7 +73,30 @@ export default function Parametres() {
     fetch("/api/settings")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (d) setSettings({ ...defaultSettings, ...d });
+        if (d) {
+          const s = d.settings || {};
+          setSettings({
+            nomRiad: s.riadName || defaultSettings.nomRiad,
+            email: s.email || defaultSettings.email,
+            adresse: s.address || defaultSettings.adresse,
+            telephone: s.phone || defaultSettings.telephone,
+            devise: s.currency || defaultSettings.devise,
+            ice: s.ice || defaultSettings.ice,
+            rc: s.rc || defaultSettings.rc,
+            tauxTVA: s.tvaRate ? Number(s.tvaRate) : defaultSettings.tauxTVA,
+            chambres: (d.rooms || []).map((r: { name: string; active: boolean }) => ({
+              nom: r.name,
+              active: r.active,
+            })),
+            categoriesRecettes: (d.categories?.encaissement || []).map((c: { name: string }) => c.name),
+            categoriesDepenses: (d.categories?.decaissement || []).map((c: { name: string }) => c.name),
+            devises: (d.currencies || []).map((c: { code: string; rate: string }) => ({
+              code: c.code,
+              nom: c.code,
+              taux: Number(c.rate) || 1,
+            })),
+          });
+        }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -83,10 +106,34 @@ export default function Parametres() {
     setSaving(true);
     setSaved(false);
     try {
+      const payload = {
+        settings: {
+          riadName: settings.nomRiad,
+          email: settings.email,
+          address: settings.adresse,
+          phone: settings.telephone,
+          currency: settings.devise,
+          ice: settings.ice,
+          rc: settings.rc,
+          tvaRate: String(settings.tauxTVA),
+        },
+        rooms: settings.chambres.map((ch) => ({
+          name: ch.nom,
+          active: ch.active,
+        })),
+        categories: {
+          encaissement: settings.categoriesRecettes.map((name) => ({ name })),
+          decaissement: settings.categoriesDepenses.map((name) => ({ name })),
+        },
+        currencies: settings.devises.map((d) => ({
+          code: d.code,
+          rate: String(d.taux),
+        })),
+      };
       const res = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
+        body: JSON.stringify(payload),
       });
       if (res.ok) setSaved(true);
     } catch {

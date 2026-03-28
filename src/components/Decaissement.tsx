@@ -53,7 +53,10 @@ export default function Decaissement() {
         const res = await fetch("/api/settings");
         if (res.ok) {
           const data = await res.json();
-          setSettings(data);
+          setSettings({
+            expenseCategories: data.categories?.decaissement?.map((c: { name: string }) => c.name) ?? [],
+            currencies: data.currencies?.map((c: { code: string }) => c.code) ?? [],
+          });
         }
       } catch {
         // use defaults

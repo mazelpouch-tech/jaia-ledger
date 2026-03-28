@@ -52,7 +52,11 @@ export default function Calendrier() {
     ])
       .then(([encData, settingsData]) => {
         setBookings(encData.data || []);
-        setRooms(settingsData.rooms || []);
+        setRooms(
+          (settingsData.rooms || [])
+            .filter((r: { active: boolean }) => r.active)
+            .map((r: { name: string }) => r.name)
+        );
       })
       .catch(() => {
         setBookings([]);
