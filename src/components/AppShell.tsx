@@ -270,7 +270,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main area */}
-      <div className="flex flex-1 flex-col lg:ml-64">
+      <div className="flex flex-1 flex-col bg-main-bg lg:ml-64">
         {/* Top header */}
         <header className="sticky top-0 z-30 flex items-center justify-between border-b border-card-border bg-main-bg px-4 py-3 lg:px-6">
           <div className="flex items-center gap-3">
