@@ -66,10 +66,10 @@ function formatVariation(current: number, previous: number): { text: string; pos
 }
 
 const METHOD_COLORS: Record<string, string> = {
-  "Espèces": "#c4973b",
-  "Carte bancaire": "#0d7c4a",
-  "Virement": "#5c4a32",
-  "Chèque": "#d4ab5a",
+  "Espèces": "#a8927a",
+  "Carte bancaire": "#6da88a",
+  "Virement": "#7a6f64",
+  "Chèque": "#c2b5a4",
 };
 
 function DonutChart({ data, total }: { data: MethodBreakdown[]; total: number }) {
@@ -88,7 +88,7 @@ function DonutChart({ data, total }: { data: MethodBreakdown[]; total: number })
   // Build conic-gradient
   const stops = segments
     .map((s) => {
-      const color = METHOD_COLORS[s.method] || "#f0e9df";
+      const color = METHOD_COLORS[s.method] || "#ede9e5";
       return `${color} ${s.start}% ${s.start + s.pct}%`;
     })
     .join(", ");
@@ -108,7 +108,7 @@ function DonutChart({ data, total }: { data: MethodBreakdown[]; total: number })
           <div key={s.method} className="flex items-center gap-2 text-xs">
             <span
               className="inline-block h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: METHOD_COLORS[s.method] || "#f0e9df" }}
+              style={{ backgroundColor: METHOD_COLORS[s.method] || "#ede9e5" }}
             />
             <span className="text-brown-dark">{s.method}</span>
             <span className="font-semibold text-brown">{s.pct.toFixed(0)}%</span>
@@ -177,7 +177,7 @@ function DailyChart({ data }: { data: DailyEntry[] }) {
               y1={80 - ((0 - minBalance) / balanceRange) * 80}
               x2={data.length * 20}
               y2={80 - ((0 - minBalance) / balanceRange) * 80}
-              stroke="#f0e9df"
+              stroke="#ede9e5"
               strokeWidth="1"
               strokeDasharray="4,3"
             />
@@ -185,7 +185,7 @@ function DailyChart({ data }: { data: DailyEntry[] }) {
           {/* Balance line */}
           <polyline
             fill="none"
-            stroke="#c4973b"
+            stroke="#a8927a"
             strokeWidth="2"
             strokeLinejoin="round"
             strokeLinecap="round"
@@ -214,15 +214,15 @@ function DailyChart({ data }: { data: DailyEntry[] }) {
             const x = i * 20 + 10;
             const y = 80 - ((d.runningBalance - minBalance) / balanceRange) * 76 - 2;
             return (
-              <circle key={d.day} cx={x} cy={y} r="2.5" fill="#c4973b">
+              <circle key={d.day} cx={x} cy={y} r="2.5" fill="#a8927a">
                 <title>{`Jour ${d.dayLabel}: ${formatMAD(d.runningBalance)}`}</title>
               </circle>
             );
           })}
           <defs>
             <linearGradient id="balanceGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#c4973b" />
-              <stop offset="100%" stopColor="#faf6f1" />
+              <stop offset="0%" stopColor="#a8927a" />
+              <stop offset="100%" stopColor="#f7f5f3" />
             </linearGradient>
           </defs>
         </svg>
