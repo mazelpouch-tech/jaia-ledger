@@ -69,6 +69,7 @@ function formatFrenchDateRange(month: string): string {
 export default function Dashboard({ onNavigate }: DashboardProps) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [liveRates, setLiveRates] = useState<Record<string, number>>({});
 
   const monthKey = getMonthKey();
 
@@ -78,6 +79,23 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       .then((d) => { if (d) setData(d); })
       .catch(() => {})
       .finally(() => setLoading(false));
+
+    // Fetch live exchange rates for common currencies
+    const currencies = ["EUR", "USD", "GBP"];
+    Promise.all(
+      currencies.map((c) =>
+        fetch(`/api/exchange-rate?from=${c}`)
+          .then((r) => r.json())
+          .then((d) => ({ code: c, rate: d.rate as number }))
+          .catch(() => null)
+      )
+    ).then((results) => {
+      const rates: Record<string, number> = {};
+      for (const r of results) {
+        if (r) rates[r.code] = r.rate;
+      }
+      setLiveRates(rates);
+    });
   }, [monthKey]);
 
   const navigate = (page: string) => onNavigate?.(page);
@@ -108,13 +126,16 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     for (const d of data.decByCurrency) {
       map.set(d.currency || "MAD", (map.get(d.currency || "MAD") ?? 0) - d.total);
     }
-    const rateMap = new Map(data.currencyRates.map((r) => [r.code, r.rate]));
+    // Prefer live rates, fall back to DB rates
+    const dbRateMap = new Map(data.currencyRates.map((r) => [r.code, r.rate]));
+    const getRate = (code: string) => liveRates[code] ?? dbRateMap.get(code) ?? 1;
     return Array.from(map.entries()).map(([currency, total]) => ({
       currency,
       total,
-      madEquivalent: currency === "MAD" ? total : total * (rateMap.get(currency) ?? 1),
+      rate: currency === "MAD" ? 1 : getRate(currency),
+      madEquivalent: currency === "MAD" ? total : total * getRate(currency),
     }));
-  }, [data]);
+  }, [data, liveRates]);
 
   const totalEnc = data?.totalEncaissements ?? 0;
   const totalDec = data?.totalDecaissements ?? 0;
@@ -229,6 +250,27 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         </div>
       </div>
 
+      {/* Live exchange rates */}
+      {Object.keys(liveRates).length > 0 && (
+        <div className="rounded-xl border border-card-border bg-accent/5 p-5">
+          <p className="mb-3 text-xs font-bold uppercase tracking-wider text-main-muted">
+            Taux de Change en Direct
+          </p>
+          <div className="flex flex-wrap gap-4">
+            {Object.entries(liveRates).map(([code, rate]) => (
+              <div key={code} className="flex items-center gap-2">
+                <span className="flex h-7 w-11 items-center justify-center rounded border border-card-border text-[10px] font-bold text-main-muted">
+                  {code}
+                </span>
+                <span className="text-sm font-medium text-main-text">
+                  1 {code} = {rate.toFixed(4)} MAD
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Currency breakdown */}
       {currencyBreakdown.length > 0 && (
         <div className="rounded-xl border border-card-border bg-card-bg p-5">
@@ -236,7 +278,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             Composition par Devise
           </p>
           <div className="space-y-3">
-            {currencyBreakdown.map(({ currency, total, madEquivalent }) => (
+            {currencyBreakdown.map(({ currency, total, rate, madEquivalent }) => (
               <div key={currency} className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <span className="flex h-7 w-11 items-center justify-center rounded border border-card-border text-[10px] font-bold text-main-muted">
@@ -248,7 +290,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 </div>
                 {currency !== "MAD" && (
                   <span className="text-xs text-main-muted">
-                    = {formatMAD(madEquivalent)}
+                    &times; {rate.toFixed(4)} = {formatMAD(madEquivalent)}
                   </span>
                 )}
               </div>

@@ -46,6 +46,9 @@ export default function Encaissement() {
   const [tauxChange, setTauxChange] = useState("");
   const [modeReglement, setModeReglement] = useState("");
 
+  const [eurRate, setEurRate] = useState<number | null>(null);
+  const [loadingRate, setLoadingRate] = useState(false);
+
   useEffect(() => {
     async function fetchSettings() {
       try {
@@ -64,6 +67,25 @@ export default function Encaissement() {
     }
     fetchSettings();
   }, []);
+
+  // Auto-fetch exchange rate when non-MAD currency is selected
+  useEffect(() => {
+    if (devise === "MAD") {
+      setTauxChange("");
+      return;
+    }
+    setLoadingRate(true);
+    fetch(`/api/exchange-rate?from=${devise}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.rate) {
+          setEurRate(d.rate);
+          setTauxChange(String(d.rate));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingRate(false));
+  }, [devise]);
 
   const categories = settings.categories?.length
     ? settings.categories
@@ -97,6 +119,11 @@ export default function Encaissement() {
     setSubmitting(true);
 
     try {
+      const parsedAmount = parseFloat(montant);
+      const rate = tauxChange ? parseFloat(tauxChange) : 1;
+      // If non-MAD currency, convert to MAD for storage
+      const madAmount = devise !== "MAD" ? parsedAmount * rate : parsedAmount;
+
       const body = {
         date,
         reference,
@@ -107,8 +134,8 @@ export default function Encaissement() {
         client: client || undefined,
         description,
         devise,
-        montant: parseFloat(montant),
-        tauxChange: tauxChange ? parseFloat(tauxChange) : undefined,
+        montant: madAmount,
+        tauxChange: devise !== "MAD" ? rate : undefined,
         modeReglement,
       };
 
@@ -329,7 +356,7 @@ export default function Encaissement() {
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brown">
-                Montant (MAD) <span className="text-red">*</span>
+                Montant ({devise}) <span className="text-red">*</span>
               </label>
               <input
                 type="number"
@@ -343,21 +370,41 @@ export default function Encaissement() {
               />
               {errors.montant && <p className="mt-1 text-xs text-red">{errors.montant}</p>}
             </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brown">
-                Taux de change
-              </label>
-              <input
-                type="number"
-                min="0"
-                step="0.0001"
-                value={tauxChange}
-                onChange={(e) => setTauxChange(e.target.value)}
-                placeholder="1.0000"
-                className="w-full rounded-lg border border-cream-dark bg-white px-3 py-2.5 text-sm text-brown-dark outline-none focus:border-gold focus:ring-1 focus:ring-gold"
-              />
-            </div>
+            {devise !== "MAD" && (
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-brown">
+                  Taux 1 {devise} = ? MAD
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.0001"
+                    value={tauxChange}
+                    onChange={(e) => setTauxChange(e.target.value)}
+                    placeholder="1.0000"
+                    className="w-full rounded-lg border border-cream-dark bg-white px-3 py-2.5 text-sm text-brown-dark outline-none focus:border-gold focus:ring-1 focus:ring-gold"
+                  />
+                  {loadingRate && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
+          {/* MAD equivalent preview */}
+          {devise !== "MAD" && montant && tauxChange && (
+            <div className="rounded-lg border border-gold/30 bg-amber-light px-4 py-2.5">
+              <p className="text-sm text-brown">
+                {parseFloat(montant).toLocaleString("fr-FR", { minimumFractionDigits: 2 })} {devise} &times; {parseFloat(tauxChange).toFixed(4)} ={" "}
+                <span className="font-bold text-brown-dark">
+                  {(parseFloat(montant) * parseFloat(tauxChange)).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MAD
+                </span>
+              </p>
+            </div>
+          )}
 
           {/* Mode de règlement */}
           <div>
