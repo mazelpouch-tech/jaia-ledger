@@ -98,11 +98,22 @@ export const bdcDepenseItems = pgTable("bdc_depense_items", {
   tvaRate: numeric("tva_rate", { precision: 5, scale: 2 }).default("10"),
 });
 
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  username: text("username").notNull().unique(),
+  displayName: text("display_name").notNull(),
+  passwordHash: text("password_hash").notNull(),
+  role: text("role").notNull().default("user"), // 'admin' or 'user'
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const auditLog = pgTable("audit_log", {
   id: serial("id").primaryKey(),
   action: text("action").notNull(),
   tableName: text("table_name").notNull(),
   recordId: integer("record_id"),
+  userId: integer("user_id").references(() => users.id),
   details: text("details"),
   createdAt: timestamp("created_at").defaultNow(),
 });

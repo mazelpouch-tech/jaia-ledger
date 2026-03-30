@@ -14,7 +14,7 @@ import Calendrier from "@/components/Calendrier";
 import BDCRecettes from "@/components/BDCRecettes";
 import BDCDepenses from "@/components/BDCDepenses";
 import Parametres from "@/components/Parametres";
-import PinLock from "@/components/PinLock";
+import LoginScreen from "@/components/LoginScreen";
 
 type PageKey =
   | "dashboard"
@@ -93,16 +93,35 @@ function formatFrenchDate(date: Date): string {
   });
 }
 
+interface AuthUser {
+  id: number;
+  username: string;
+  displayName: string;
+  role: string;
+}
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const [locked, setLocked] = useState(true);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [isFirstSetup, setIsFirstSetup] = useState(false);
   const [activePage, setActivePage] = useState<PageKey>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [todayStr, setTodayStr] = useState("");
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
-    const hasPin = localStorage.getItem("jaia-pin-hash");
-    if (!hasPin) setLocked(false);
+    Promise.all([
+      fetch("/api/auth/me").then((r) => r.json()).catch(() => ({ user: null })),
+      fetch("/api/auth/setup-check").then((r) => r.json()).catch(() => ({ hasUsers: true })),
+    ]).then(([meData, setupData]) => {
+      if (meData.user) {
+        setAuthUser(meData.user);
+      }
+      if (!setupData.hasUsers) {
+        setIsFirstSetup(true);
+      }
+      setAuthChecked(true);
+    });
   }, []);
 
   useEffect(() => {
@@ -150,14 +169,32 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setSidebarOpen((prev) => !prev);
   }, []);
 
+  const handleLogout = useCallback(async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setAuthUser(null);
+  }, []);
+
   useKeyboardShortcuts({
     onNavigate: handleNavClick,
     onToggleSidebar: toggleSidebar,
     onToggleDarkMode: toggleDarkMode,
   });
 
-  if (locked) {
-    return <PinLock onUnlock={() => setLocked(false)} />;
+  if (!authChecked) {
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-cream">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!authUser) {
+    return (
+      <LoginScreen
+        isFirstSetup={isFirstSetup}
+        onLogin={(user) => setAuthUser(user)}
+      />
+    );
   }
 
   return (
@@ -198,12 +235,28 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Bottom section */}
         <div className="border-t border-white/10 px-4 py-4">
+          <div className="mb-2 flex items-center gap-3 px-3 py-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/20 text-xs font-bold text-accent">
+              {authUser.displayName.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-sidebar-text">{authUser.displayName}</p>
+              <p className="text-[10px] uppercase tracking-wider text-sidebar-muted">{authUser.role}</p>
+            </div>
+          </div>
           <button
             onClick={toggleDarkMode}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-muted transition-colors hover:bg-white/5 hover:text-sidebar-text"
           >
             <span className="text-lg">{darkMode ? "☀" : "☾"}</span>
             <span>{darkMode ? "Mode clair" : "Mode sombre"}</span>
+          </button>
+          <button
+            onClick={handleLogout}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-red transition-colors hover:bg-white/5"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            <span>Déconnexion</span>
           </button>
         </div>
       </aside>
@@ -259,12 +312,28 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="border-t border-white/10 px-4 py-4">
+          <div className="mb-2 flex items-center gap-3 px-3 py-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/20 text-xs font-bold text-accent">
+              {authUser.displayName.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-sidebar-text">{authUser.displayName}</p>
+              <p className="text-[10px] uppercase tracking-wider text-sidebar-muted">{authUser.role}</p>
+            </div>
+          </div>
           <button
             onClick={toggleDarkMode}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-muted transition-colors hover:bg-white/5 hover:text-sidebar-text"
           >
             <span className="text-lg">{darkMode ? "☀" : "☾"}</span>
             <span>{darkMode ? "Mode clair" : "Mode sombre"}</span>
+          </button>
+          <button
+            onClick={handleLogout}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-red transition-colors hover:bg-white/5"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            <span>Déconnexion</span>
           </button>
         </div>
       </aside>

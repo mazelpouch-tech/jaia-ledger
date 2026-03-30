@@ -56,16 +56,108 @@ export default function Parametres() {
   const [newDeviseCode, setNewDeviseCode] = useState("");
   const [newDeviseNom, setNewDeviseNom] = useState("");
   const [newDeviseTaux, setNewDeviseTaux] = useState("");
-  const [hasPin, setHasPin] = useState(false);
+
+  // User management state
+  interface UserInfo {
+    id: number;
+    username: string;
+    displayName: string;
+    role: string;
+    active: boolean;
+  }
+  const [usersList, setUsersList] = useState<UserInfo[]>([]);
+  const [currentUser, setCurrentUser] = useState<UserInfo | null>(null);
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserDisplay, setNewUserDisplay] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserRole, setNewUserRole] = useState("user");
+  const [userError, setUserError] = useState("");
+  const [userSuccess, setUserSuccess] = useState("");
 
   useEffect(() => {
-    setHasPin(!!localStorage.getItem("jaia-pin-hash"));
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => { if (d.user) setCurrentUser(d.user); })
+      .catch(() => {});
   }, []);
 
-  const removePin = () => {
-    if (window.confirm("Supprimer le code PIN ? L\u2019application ne sera plus prot\u00e9g\u00e9e.")) {
-      localStorage.removeItem("jaia-pin-hash");
-      setHasPin(false);
+  useEffect(() => {
+    if (currentUser?.role === "admin") {
+      fetch("/api/auth/users")
+        .then((r) => r.json())
+        .then((d) => { if (d.users) setUsersList(d.users); })
+        .catch(() => {});
+    }
+  }, [currentUser]);
+
+  const addUser = async () => {
+    setUserError("");
+    setUserSuccess("");
+    if (!newUserName.trim() || !newUserDisplay.trim() || !newUserPassword) {
+      setUserError("Tous les champs sont requis");
+      return;
+    }
+    try {
+      const res = await fetch("/api/auth/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: newUserName,
+          displayName: newUserDisplay,
+          password: newUserPassword,
+          role: newUserRole,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setUserError(data.error || "Erreur");
+        return;
+      }
+      setUsersList((prev) => [...prev, data.user]);
+      setNewUserName("");
+      setNewUserDisplay("");
+      setNewUserPassword("");
+      setNewUserRole("user");
+      setShowAddUser(false);
+      setUserSuccess("Utilisateur ajouté avec succès");
+      setTimeout(() => setUserSuccess(""), 3000);
+    } catch {
+      setUserError("Erreur serveur");
+    }
+  };
+
+  const toggleUserActive = async (user: UserInfo) => {
+    try {
+      const res = await fetch("/api/auth/users", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: user.id, active: !user.active }),
+      });
+      if (res.ok) {
+        setUsersList((prev) =>
+          prev.map((u) => (u.id === user.id ? { ...u, active: !u.active } : u))
+        );
+      }
+    } catch {
+      // silent
+    }
+  };
+
+  const changeUserRole = async (user: UserInfo, role: string) => {
+    try {
+      const res = await fetch("/api/auth/users", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: user.id, role }),
+      });
+      if (res.ok) {
+        setUsersList((prev) =>
+          prev.map((u) => (u.id === user.id ? { ...u, role } : u))
+        );
+      }
+    } catch {
+      // silent
     }
   };
 
@@ -572,25 +664,143 @@ export default function Parametres() {
         </div>
       </div>
 
-      {/* S\u00e9curit\u00e9 */}
-      <div className="rounded-xl border border-cream-dark bg-white p-5">
-        <h2 className="mb-4 font-[family-name:var(--font-heading)] text-xl font-semibold text-brown-dark">
-          S&eacute;curit&eacute;
-        </h2>
-        {hasPin ? (
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-green">Code PIN actif</p>
-              <p className="text-xs text-brown">L&apos;application est prot&eacute;g&eacute;e par un code PIN</p>
+      {/* Gestion des utilisateurs */}
+      {currentUser?.role === "admin" && (
+        <div className="rounded-xl border border-cream-dark bg-white p-5">
+          <h2 className="mb-4 font-[family-name:var(--font-heading)] text-xl font-semibold text-brown-dark">
+            Utilisateurs
+          </h2>
+
+          {userSuccess && (
+            <div className="mb-3 rounded-lg bg-green-light px-3 py-2 text-sm font-medium text-green">
+              {userSuccess}
             </div>
-            <button onClick={removePin} className="rounded-lg border border-red/30 px-3 py-1.5 text-sm text-red transition-colors hover:bg-red-light">
-              Supprimer
+          )}
+
+          {usersList.length > 0 && (
+            <div className="mb-4 space-y-2">
+              {usersList.map((user) => (
+                <div
+                  key={user.id}
+                  className="flex items-center justify-between rounded-lg border border-cream-dark bg-cream px-4 py-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/20 text-xs font-bold text-accent">
+                      {user.displayName.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-brown-dark">
+                        {user.displayName}
+                        {user.id === currentUser?.id && (
+                          <span className="ml-2 text-[10px] text-brown">(vous)</span>
+                        )}
+                      </p>
+                      <p className="text-xs text-brown">@{user.username}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <select
+                      value={user.role}
+                      onChange={(e) => changeUserRole(user, e.target.value)}
+                      disabled={user.id === currentUser?.id}
+                      className="rounded-md border border-cream-dark bg-white px-2 py-1 text-xs text-brown-dark focus:border-gold focus:outline-none disabled:opacity-50"
+                    >
+                      <option value="admin">Admin</option>
+                      <option value="user">Utilisateur</option>
+                    </select>
+                    {user.id !== currentUser?.id && (
+                      <button
+                        onClick={() => toggleUserActive(user)}
+                        className={`relative h-6 w-11 rounded-full transition-colors ${
+                          user.active ? "bg-green" : "bg-cream-dark"
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                            user.active ? "translate-x-5" : "translate-x-0"
+                          }`}
+                        />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {showAddUser ? (
+            <div className="rounded-lg border border-gold/30 bg-amber-light p-4">
+              <h3 className="mb-3 text-sm font-semibold text-brown-dark">Nouvel utilisateur</h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-[10px] font-semibold uppercase text-brown">Nom d&apos;utilisateur</label>
+                  <input
+                    type="text"
+                    value={newUserName}
+                    onChange={(e) => setNewUserName(e.target.value)}
+                    placeholder="identifiant"
+                    className="w-full rounded-md border border-cream-dark bg-white px-3 py-2 text-sm text-brown-dark focus:border-gold focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-semibold uppercase text-brown">Nom complet</label>
+                  <input
+                    type="text"
+                    value={newUserDisplay}
+                    onChange={(e) => setNewUserDisplay(e.target.value)}
+                    placeholder="Prénom Nom"
+                    className="w-full rounded-md border border-cream-dark bg-white px-3 py-2 text-sm text-brown-dark focus:border-gold focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-semibold uppercase text-brown">Mot de passe</label>
+                  <input
+                    type="password"
+                    value={newUserPassword}
+                    onChange={(e) => setNewUserPassword(e.target.value)}
+                    className="w-full rounded-md border border-cream-dark bg-white px-3 py-2 text-sm text-brown-dark focus:border-gold focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-semibold uppercase text-brown">Rôle</label>
+                  <select
+                    value={newUserRole}
+                    onChange={(e) => setNewUserRole(e.target.value)}
+                    className="w-full rounded-md border border-cream-dark bg-white px-3 py-2 text-sm text-brown-dark focus:border-gold focus:outline-none"
+                  >
+                    <option value="user">Utilisateur</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+              </div>
+              {userError && (
+                <p className="mt-2 text-sm text-red">{userError}</p>
+              )}
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={addUser}
+                  className="rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-gold-light"
+                >
+                  Ajouter
+                </button>
+                <button
+                  onClick={() => { setShowAddUser(false); setUserError(""); }}
+                  className="rounded-lg border border-cream-dark px-4 py-2 text-sm text-brown transition-colors hover:bg-cream"
+                >
+                  Annuler
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowAddUser(true)}
+              className="rounded-lg border border-dashed border-gold/50 px-4 py-2.5 text-sm font-medium text-gold transition-colors hover:bg-amber-light"
+            >
+              + Ajouter un utilisateur
             </button>
-          </div>
-        ) : (
-          <p className="text-sm text-brown">Aucun code PIN configur&eacute;. Rechargez l&apos;application pour en cr&eacute;er un.</p>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Sauvegarde & Restauration */}
       <div className="rounded-xl border border-cream-dark bg-white p-5">
