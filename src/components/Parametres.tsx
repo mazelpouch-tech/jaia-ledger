@@ -77,6 +77,7 @@ export default function Parametres() {
   const [newUserName, setNewUserName] = useState("");
   const [newUserDisplay, setNewUserDisplay] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
+  const [showNewUserPassword, setShowNewUserPassword] = useState(false);
   const [newUserRole, setNewUserRole] = useState("user");
   const [userError, setUserError] = useState("");
   const [userSuccess, setUserSuccess] = useState("");
@@ -800,12 +801,27 @@ export default function Parametres() {
                 </div>
                 <div>
                   <label className="mb-1 block text-[10px] font-semibold uppercase text-brown">Mot de passe</label>
-                  <input
-                    type="password"
-                    value={newUserPassword}
-                    onChange={(e) => setNewUserPassword(e.target.value)}
-                    className="w-full rounded-md border border-cream-dark bg-white px-3 py-2 text-sm text-brown-dark focus:border-gold focus:outline-none"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showNewUserPassword ? "text" : "password"}
+                      value={newUserPassword}
+                      onChange={(e) => setNewUserPassword(e.target.value)}
+                      className="w-full rounded-md border border-cream-dark bg-white px-3 py-2 pr-10 text-sm text-brown-dark focus:border-gold focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewUserPassword((v) => !v)}
+                      aria-label={showNewUserPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                      title={showNewUserPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                      className="absolute inset-y-0 right-0 flex items-center px-2.5 text-brown transition-colors hover:text-gold"
+                    >
+                      {showNewUserPassword ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                      )}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="mb-1 block text-[10px] font-semibold uppercase text-brown">Rôle</label>
