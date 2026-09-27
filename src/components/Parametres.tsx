@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 interface Devise {
   code: string;
@@ -48,6 +48,12 @@ export default function Parametres() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // Backup restore
+  const restoreInputRef = useRef<HTMLInputElement>(null);
+  const [pendingRestore, setPendingRestore] = useState<{ fileName: string; payload: unknown } | null>(null);
+  const [restoring, setRestoring] = useState(false);
+  const [restoreError, setRestoreError] = useState("");
 
   // Temporary inputs for adding items
   const [newChambre, setNewChambre] = useState("");
@@ -233,6 +239,46 @@ export default function Parametres() {
     } finally {
       setSaving(false);
       setTimeout(() => setSaved(false), 3000);
+    }
+  };
+
+  const handleRestoreFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setRestoreError("");
+    const file = e.target.files?.[0];
+    e.target.value = ""; // let the same file be picked again later
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text());
+      if (!parsed || typeof parsed !== "object" || !parsed.data) {
+        setRestoreError("Fichier de sauvegarde invalide.");
+        return;
+      }
+      setPendingRestore({ fileName: file.name, payload: parsed });
+    } catch {
+      setRestoreError("Impossible de lire ce fichier (JSON invalide).");
+    }
+  };
+
+  const confirmRestore = async () => {
+    if (!pendingRestore) return;
+    setRestoring(true);
+    setRestoreError("");
+    try {
+      const res = await fetch("/api/backup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(pendingRestore.payload),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Échec de la restauration");
+      }
+      setPendingRestore(null);
+      // Reload so every screen reflects the restored data.
+      window.location.reload();
+    } catch (err) {
+      setRestoreError(err instanceof Error ? err.message : "Échec de la restauration");
+      setRestoring(false);
     }
   };
 
@@ -808,7 +854,8 @@ export default function Parametres() {
           Sauvegarde &amp; Restauration
         </h2>
         <p className="mb-4 text-sm text-brown">
-          Exportez vos donn&eacute;es pour les sauvegarder ou les transf&eacute;rer.
+          Exportez vos donn&eacute;es pour les sauvegarder, ou restaurez un fichier de
+          sauvegarde export&eacute; pr&eacute;c&eacute;demment.
         </p>
         <div className="flex flex-col gap-3 sm:flex-row">
           <button
@@ -831,15 +878,59 @@ export default function Parametres() {
           >
             Exporter les donn&eacute;es
           </button>
+          <input
+            ref={restoreInputRef}
+            type="file"
+            accept="application/json,.json"
+            onChange={handleRestoreFile}
+            className="hidden"
+          />
           <button
-            disabled
-            className="rounded-lg border border-cream-dark px-4 py-2.5 text-sm font-semibold text-brown/50 opacity-60 cursor-not-allowed"
-            title="Bient&ocirc;t disponible"
+            onClick={() => restoreInputRef.current?.click()}
+            className="rounded-lg border border-cream-dark px-4 py-2.5 text-sm font-semibold text-brown-dark transition-colors hover:bg-cream-dark"
           >
-            Restaurer (Bient&ocirc;t disponible)
+            Restaurer une sauvegarde
           </button>
         </div>
+        {restoreError && (
+          <p className="mt-3 rounded-lg bg-red-light px-3 py-2 text-sm text-red">{restoreError}</p>
+        )}
       </div>
+
+      {/* Restore confirmation */}
+      {pendingRestore && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-brown-dark">Restaurer cette sauvegarde ?</h3>
+            <p className="mt-2 text-sm text-brown">
+              Le fichier <span className="font-medium text-brown-dark">{pendingRestore.fileName}</span>{" "}
+              va <span className="font-semibold text-red">remplacer</span> toutes les recettes,
+              d&eacute;penses, cat&eacute;gories, chambres, devises et param&egrave;tres actuels.
+              Cette action est irr&eacute;versible. Les bons de commande et les utilisateurs ne sont pas
+              affect&eacute;s.
+            </p>
+            {restoreError && (
+              <p className="mt-3 rounded-lg bg-red-light px-3 py-2 text-sm text-red">{restoreError}</p>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => { setPendingRestore(null); setRestoreError(""); }}
+                disabled={restoring}
+                className="rounded-lg border border-cream-dark px-4 py-2 text-sm font-medium text-brown transition-colors hover:bg-cream disabled:opacity-50"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={confirmRestore}
+                disabled={restoring}
+                className="rounded-lg bg-red px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red/90 disabled:opacity-50"
+              >
+                {restoring ? "Restauration..." : "Restaurer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Save button */}
       <button

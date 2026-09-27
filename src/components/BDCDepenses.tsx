@@ -42,6 +42,44 @@ function computeTotals(articles: Article[]) {
   return { totalHT, totalTVA, totalTTC: totalHT + totalTVA };
 }
 
+// The API stores bons de commande with English field names; the UI uses French.
+// This maps an API row into the shape this component renders.
+interface ApiItem {
+  description: string;
+  quantity: number | string;
+  unitPrice: number | string;
+  tvaRate?: number | string;
+}
+interface ApiBDC {
+  id: number | string;
+  number: string;
+  date: string;
+  supplier: string;
+  status: string;
+  items?: ApiItem[];
+  totalHT?: number;
+  totalTVA?: number;
+  totalTTC?: number;
+}
+function normalizeBDC(raw: ApiBDC): BDC {
+  return {
+    id: String(raw.id),
+    numero: raw.number,
+    date: raw.date,
+    fournisseur: raw.supplier,
+    statut: (raw.status as BDC["statut"]) || "brouillon",
+    articles: (raw.items ?? []).map((it) => ({
+      description: it.description,
+      quantite: Number(it.quantity) || 0,
+      prixUnitaireHT: Number(it.unitPrice) || 0,
+      tauxTVA: Number(it.tvaRate ?? 20) || 0,
+    })),
+    totalHT: raw.totalHT ?? 0,
+    totalTVA: raw.totalTVA ?? 0,
+    totalTTC: raw.totalTTC ?? 0,
+  };
+}
+
 function StatusBadge({ statut }: { statut: string }) {
   const cls =
     statut === "payé"
@@ -76,7 +114,8 @@ export default function BDCDepenses() {
       const res = await fetch("/api/bdc-depenses");
       if (res.ok) {
         const d = await res.json();
-        setBdcs(Array.isArray(d) ? d : d.data ?? []);
+        const rows: ApiBDC[] = Array.isArray(d) ? d : d.data ?? [];
+        setBdcs(rows.map(normalizeBDC));
       }
     } catch {
       // silent
@@ -116,7 +155,6 @@ export default function BDCDepenses() {
     const validArticles = formArticles.filter((a) => a.description.trim());
     if (validArticles.length === 0) return;
 
-    const totals = computeTotals(validArticles);
     setSaving(true);
     try {
       const res = await fetch("/api/bdc-depenses", {
@@ -124,9 +162,13 @@ export default function BDCDepenses() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           date: formDate,
-          fournisseur: formFournisseur,
-          articles: validArticles,
-          ...totals,
+          supplier: formFournisseur,
+          items: validArticles.map((a) => ({
+            description: a.description,
+            quantity: a.quantite,
+            unitPrice: String(a.prixUnitaireHT),
+            tvaRate: String(a.tauxTVA),
+          })),
         }),
       });
       if (res.ok) {
