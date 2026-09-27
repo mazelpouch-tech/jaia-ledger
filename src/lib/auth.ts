@@ -4,7 +4,13 @@ import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
 import crypto from "crypto";
 
-const AUTH_SECRET = process.env.AUTH_SECRET || "jaia-ledger-default-secret-change-me";
+// In production the secret MUST be provided via the environment. We deliberately
+// do NOT fall back to a hard-coded value in production, because a public default
+// key would let anyone forge session cookies. In development a fixed dev-only key
+// keeps local work friction-free.
+const AUTH_SECRET =
+  process.env.AUTH_SECRET ||
+  (process.env.NODE_ENV === "production" ? "" : "jaia-ledger-dev-only-secret");
 const SESSION_COOKIE = "jaia-session";
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60; // 7 days in seconds
 
@@ -26,6 +32,11 @@ export async function verifyPassword(password: string, stored: string): Promise<
 // --- Session token (userId:timestamp:hmac) ---
 
 function signToken(userId: number): string {
+  if (!AUTH_SECRET) {
+    throw new Error(
+      "AUTH_SECRET is not configured. Set the AUTH_SECRET environment variable in production."
+    );
+  }
   const ts = Date.now().toString(36);
   const payload = `${userId}:${ts}`;
   const hmac = crypto.createHmac("sha256", AUTH_SECRET).update(payload).digest("hex");
@@ -33,6 +44,7 @@ function signToken(userId: number): string {
 }
 
 function verifyToken(token: string): { userId: number; timestamp: number } | null {
+  if (!AUTH_SECRET) return null;
   const parts = token.split(":");
   if (parts.length !== 3) return null;
   const [userIdStr, ts, hmac] = parts;

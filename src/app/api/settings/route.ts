@@ -61,39 +61,84 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Update rooms if provided
+    // Reconcile rooms by name. The client sends the full desired list without
+    // ids, so we match existing rows by name (update in place), insert new
+    // names, and delete rows the client dropped. Deletes are guarded because a
+    // room referenced by an encaissement cannot be removed (FK) — in that case
+    // we keep it rather than aborting the whole save.
     if (body.rooms) {
-      for (const room of body.rooms) {
-        if (room.id) {
-          await db.update(rooms).set({ name: room.name, active: room.active }).where(eq(rooms.id, room.id));
+      const provided = (body.rooms as { name: string; active?: boolean }[]).filter(
+        (r) => r.name?.trim()
+      );
+      const providedNames = new Set(provided.map((r) => r.name));
+      const existing = await db.select().from(rooms);
+
+      for (const r of provided) {
+        const match = existing.find((e) => e.name === r.name);
+        if (match) {
+          await db.update(rooms).set({ active: r.active ?? true }).where(eq(rooms.id, match.id));
         } else {
-          await db.insert(rooms).values({ name: room.name, active: room.active ?? true });
+          await db.insert(rooms).values({ name: r.name, active: r.active ?? true });
+        }
+      }
+      for (const e of existing) {
+        if (!providedNames.has(e.name)) {
+          try {
+            await db.delete(rooms).where(eq(rooms.id, e.id));
+          } catch {
+            // Referenced by a transaction — leave it in place.
+          }
         }
       }
     }
 
-    // Update categories if provided
+    // Reconcile categories by (name, type), same strategy as rooms.
     if (body.categories) {
-      const allCats = [
-        ...(body.categories.encaissement || []).map((c: { id?: number; name: string }) => ({ ...c, type: "encaissement" })),
-        ...(body.categories.decaissement || []).map((c: { id?: number; name: string }) => ({ ...c, type: "decaissement" })),
-      ];
-      for (const cat of allCats) {
-        if (cat.id) {
-          await db.update(categories).set({ name: cat.name, type: cat.type }).where(eq(categories.id, cat.id));
-        } else {
-          await db.insert(categories).values({ name: cat.name, type: cat.type });
+      const provided = [
+        ...(body.categories.encaissement || []).map((c: { name: string }) => ({ name: c.name, type: "encaissement" })),
+        ...(body.categories.decaissement || []).map((c: { name: string }) => ({ name: c.name, type: "decaissement" })),
+      ].filter((c) => c.name?.trim());
+      const keyOf = (name: string, type: string) => `${type}:${name}`;
+      const providedKeys = new Set(provided.map((c) => keyOf(c.name, c.type)));
+      const existing = await db.select().from(categories);
+
+      for (const c of provided) {
+        const match = existing.find((e) => e.name === c.name && e.type === c.type);
+        if (!match) {
+          await db.insert(categories).values({ name: c.name, type: c.type });
+        }
+      }
+      for (const e of existing) {
+        if (!providedKeys.has(keyOf(e.name, e.type))) {
+          try {
+            await db.delete(categories).where(eq(categories.id, e.id));
+          } catch {
+            // Referenced by a transaction — leave it in place.
+          }
         }
       }
     }
 
-    // Update currencies if provided
+    // Reconcile currencies by code. Currencies are not referenced by a foreign
+    // key (transactions store the currency as text), so deletes are safe.
     if (body.currencies) {
-      for (const curr of body.currencies) {
-        if (curr.id) {
-          await db.update(currencies).set({ code: curr.code, rate: curr.rate }).where(eq(currencies.id, curr.id));
+      const provided = (body.currencies as { code: string; rate: string }[]).filter(
+        (c) => c.code?.trim()
+      );
+      const providedCodes = new Set(provided.map((c) => c.code));
+      const existing = await db.select().from(currencies);
+
+      for (const c of provided) {
+        const match = existing.find((e) => e.code === c.code);
+        if (match) {
+          await db.update(currencies).set({ rate: c.rate }).where(eq(currencies.id, match.id));
         } else {
-          await db.insert(currencies).values({ code: curr.code, rate: curr.rate });
+          await db.insert(currencies).values({ code: c.code, rate: c.rate });
+        }
+      }
+      for (const e of existing) {
+        if (!providedCodes.has(e.code)) {
+          await db.delete(currencies).where(eq(currencies.id, e.id));
         }
       }
     }
